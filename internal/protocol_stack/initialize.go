@@ -1,0 +1,185 @@
+package protocol_stack
+
+import (
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"strings"
+    "sync"
+    "backend/internal/database"
+    "backend/internal"
+    "time"
+    "backend/internal/udp"
+	"encoding/binary"
+
+)
+
+
+type Response struct {
+    Status bool `json:"status"`
+}
+
+type UserAddr struct {
+    Addr     *net.UDPAddr
+    LastSeen time.Time
+}
+
+type IpAddresses struct {
+    mu     sync.Mutex
+    IpList map[string]*UserAddr
+}
+
+var authService *database.AuthService
+var repo *database.Repository
+
+func (s *IpAddresses) AddIP(addr *net.UDPAddr) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    s.IpList[addr.String()] = &UserAddr{
+        Addr:     addr,
+        LastSeen: time.Now(),
+    }
+}
+
+
+func (s *IpAddresses) DelIP (ip string){
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    delete(s.IpList, ip)
+}
+
+func (s *IpAddresses) UpdateLastSeen(ip string) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    if user, exists := s.IpList[ip]; exists {
+        user.LastSeen = time.Now()
+    }
+}
+
+func (s *IpAddresses) IsAuthorized(ip string) bool {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    _, exists := s.IpList[ip]
+    return exists
+}
+
+func (s *IpAddresses) GetList() []*net.UDPAddr {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    list := make([]*net.UDPAddr, 0, len(s.IpList))
+    for _, user := range s.IpList {
+        list = append(list, user.Addr)
+    }
+    return list
+}
+
+
+func Start() error {
+    db, err := database.InitDB()
+    if err != nil {
+        return fmt.Errorf("failed to init db: %v", err)
+    }
+    authService = database.NewAuthService(db)
+    repo = database.NewRepository(db)
+    mux := http.NewServeMux()
+    limiter := NewIPRateLimiter(5, 10)
+
+    mux.HandleFunc("/", JWTMiddleware(handleHTTP))
+    mux.HandleFunc("/register", handleRegister)
+    mux.HandleFunc("/login", handleLogin)
+    mux.HandleFunc("/verify", JWTMiddleware(handleVerify))
+    mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
+    mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
+    mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
+
+    handlerWithCORS := enableCORS(mux)
+    finalHandler := limitMiddleware(limiter, handlerWithCORS)
+    return http.ListenAndServe(":8081", finalHandler)
+}
+
+func StartUDP() error {
+    rooms := udp.NewRoomManager()
+
+	go func() {
+        ticker := time.NewTicker(30 * time.Second)
+        for range ticker.C {
+            rooms.Cleanup()
+        }
+    }()
+	
+    addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:8082")
+    ln, _ := net.ListenUDP("udp", addr)
+    defer ln.Close()
+	ln.SetReadBuffer(4194304) 
+	ln.SetWriteBuffer(4194304)
+
+    log.Printf("[UDP] Сервер запущен на %s", addr.String())
+
+    for {
+        buf := make([]byte, 2048)
+        n, remoteAddr, err := ln.ReadFromUDP(buf)
+        if err != nil {
+            continue
+        }
+
+        data := buf[:n]
+        message := string(data)
+        ipStr := remoteAddr.String()
+
+        // А. ОБРАБОТКА ВХОДА (HELLO)
+        if strings.HasPrefix(message, "HELLO ") {
+            parts := strings.Split(message, " ")
+            if len(parts) < 3 { continue }
+
+            token, roomID := parts[1], parts[2]
+            uid, err := authService.GetUserIDFromToken(token)
+            if err != nil { 
+                log.Printf("[UDP] Ошибка токена от %s: %v", ipStr, err)
+                continue 
+            }
+
+            // РЕГИСТРАЦИЯ: без этого GetParticipants всегда будет возвращать false
+            isNew := rooms.AddUser(roomID, uid, remoteAddr, ln)
+            if isNew {
+                log.Printf("[UDP] Пользователь %s вошел в комнату %s (%s)", uid, roomID, ipStr)
+            }
+            continue
+        }
+
+        // Б. ОБРАБОТКА ВЫХОДА (BYE)
+        if strings.HasPrefix(message, "BYE") {
+            rooms.RemoveUserByAddr(ipStr)
+            continue
+        }
+
+        // В. ОБРАБОТКА АУДИО
+        // Теперь GetParticipants найдет участников, так как мы их добавили выше в HELLO
+        if participants, ok := rooms.GetParticipants(ipStr); ok {
+            rooms.UpdateActivity(ipStr)
+            
+            if n >= 4 {
+                // Извлекаем Sequence Number для анализа потерь
+                seq := binary.BigEndian.Uint32(data[:4])
+                action := rooms.AnalyzePacketLoss(ipStr, seq)
+                
+                if action == "DOWN" {
+                    ln.WriteToUDP([]byte("QUALITY_DOWN"), remoteAddr)
+                } else if action == "UP" {
+                    ln.WriteToUDP([]byte("QUALITY_UP"), remoteAddr)
+                }
+            }
+
+            // Копируем данные для безопасной отправки в горутине
+            packetCopy := make([]byte, n)
+            copy(packetCopy, data)
+
+            // Рассылаем остальным
+            go internal.SFU(packetCopy, participants, remoteAddr, ln)
+        } else {
+            // Если мы здесь — значит аудио пришло раньше, чем обработался HELLO 
+            // или адрес отправителя не совпадает с тем, что был в HELLO
+            log.Printf("[UDP] Пакет от неизвестного адреса: %s", ipStr)
+        }
+    }
+}
