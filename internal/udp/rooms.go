@@ -129,7 +129,6 @@ func (rm *RoomManager) RemoveUserByAddr(addrStr string) {
 
 
 func (rm *RoomManager) AnalyzePacketLoss(addrStr string, currentSeq uint32) string {
-    // Используем RLock (блокировку на чтение), чтобы не мешать другим
     rm.Mu.RLock()
     userID, ok := rm.AddrToUser[addrStr]
     if !ok {
@@ -138,9 +137,8 @@ func (rm *RoomManager) AnalyzePacketLoss(addrStr string, currentSeq uint32) stri
     }
     roomID := rm.UserToRoom[userID]
     user := rm.Rooms[roomID][userID]
-    rm.Mu.RUnlock() // СРАЗУ отпускаем глобальный лок!
+    rm.Mu.RUnlock()
 
-    // Блокируем только статистику конкретного пользователя
     user.mu.Lock()
     defer user.mu.Unlock()
 

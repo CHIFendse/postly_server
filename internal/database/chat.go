@@ -90,7 +90,7 @@ func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error)
 func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, error) {
     var targetUserID string
     
-    // 1. Находим ID собеседника
+	
     err := r.db.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", targetUsername).Scan(&targetUserID)
     if err != nil {
         if err == sql.ErrNoRows {
@@ -99,15 +99,12 @@ func (r *Repository) CreateNewChat(userID string, targetUsername string) (string
         return "", err
     }
 
-    // 2. СОРТИРОВКА: всегда ставим меньший UUID первым
-    // Это гарантирует, что для пары пользователей всегда будет только ОДНА запись в БД
     u1, u2 := userID, targetUserID
     if u1 > u2 {
         u1, u2 = u2, u1
     }
 
     var chatID string
-    // 3. Запрос к таблице chats с правильными полями
     query := `
 	INSERT INTO chats (user_id1, user_id2)
 	VALUES ($1, $2)

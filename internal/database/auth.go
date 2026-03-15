@@ -11,12 +11,10 @@ import (
     "golang.org/x/crypto/bcrypt"
 )
 
-// Переименовали в AuthService
 type AuthService struct {
     db *sql.DB
 }
 
-// Конструктор тоже переименован
 func NewAuthService(db *sql.DB) *AuthService {
     return &AuthService{db: db}
 }
@@ -26,7 +24,6 @@ type Claims struct {
     jwt.RegisteredClaims
 }
 
-// Методы остаются такими же, только привязаны к AuthService
 func (s *AuthService) Register(username, password, email, phone string) error {
     username = strings.ToLower(strings.TrimSpace(username))
     if username == "" || password == "" {
