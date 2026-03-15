@@ -9,18 +9,16 @@ import (
 func main() {
     err := godotenv.Load()
     if err != nil {
-        log.Fatal("Ошибка загрузки .env файла")
+        log.Fatal("error of getting env")
     }
-    log.Println("Сервер DisMes запускается...")
     go func() {
-        log.Println("Запуск UDP на :8082 (голос)...")
+        log.Println("The server was started")
         if err := protocol_stack.StartUDP(); err != nil {
-            log.Printf("Ошибка UDP сервера: %v", err)
+            log.Printf("error from UDP server: %v", err)
         }
     }()
 
-    log.Println("Запуск основного сервера на :8081...")
     if err := protocol_stack.Start(); err != nil {
-        log.Fatalf("Критическая ошибка основного сервера: %v", err)
+        log.Fatalf("error from MAIN server: %v", err)
     }
 }
