@@ -60,7 +60,7 @@ func (rm *RoomManager) AddUser(roomID, userID string, addr *net.UDPAddr, ln *net
     }
     rm.AddrToUser[addr.String()] = userID
     rm.UserToRoom[userID] = roomID
-	log.Printf("[DEBUG] Пользователь %s зарегистрирован с адресом %s", userID, addr.String())
+	log.Printf("[DEBUG] user registered with address %s", addr.String())
     
     return isNew
 }
@@ -73,14 +73,14 @@ func (rm *RoomManager) GetParticipants(addrStr string) ([]*net.UDPAddr, bool) {
     userID, ok := rm.AddrToUser[addrStr]
     if !ok {
         // ЛОГ ЗДЕСЬ: Если это сработает, значит адрес изменился после HELLO
-        log.Printf("[DEBUG] GetParticipants: адрес %s не найден в AddrToUser", addrStr)
+        log.Printf("[DEBUG] GetParticipants: address %s not found in AddrToUser", addrStr)
         return nil, false
     }
 
     // 2. Узнаем, в какой комнате этот пользователь
     roomID, ok := rm.UserToRoom[userID]
     if !ok {
-        log.Printf("[DEBUG] GetParticipants: пользователь %s не привязан к комнате", userID)
+        log.Printf("[DEBUG] GetParticipants: address %s not in the room", userID)
         return nil, false
     }
 
@@ -118,7 +118,7 @@ func (rm *RoomManager) RemoveUserByAddr(addrStr string) {
 
     roomID := rm.UserToRoom[userID]
     
-    log.Printf("[UDP] Пользователь %s покинул чат (BYE)", userID)
+    log.Printf("[UDP] user %s left the chat (BYE)", userID)
     
     delete(rm.AddrToUser, addrStr)
     delete(rm.UserToRoom, userID)
@@ -158,7 +158,7 @@ func (rm *RoomManager) AnalyzePacketLoss(addrStr string, currentSeq uint32) stri
         user.TotalPackets = 0
 
         if lossRate > 0.05 {
-            log.Printf("[RTCP] Высокие потери для %s: %.2f%% (%d пак.)", userID, lossRate*100, lp)
+            log.Printf("[RTCP] high losses %s: %.2f%% (%d pac.)", userID, lossRate*100, lp)
             return "DOWN"
         } else if lossRate < 0.01 {
             return "UP"
@@ -175,7 +175,7 @@ func (rm *RoomManager) Cleanup() {
     for roomID, users := range rm.Rooms {
         for userID, user := range users {
             if now.Sub(user.LastSeen) > 30*time.Second {
-                log.Printf("[UDP] Тайм-аут пользователя %s", userID)
+                log.Printf("[UDP] timeout user %s", userID)
                 delete(rm.AddrToUser, user.Addr.String())
                 delete(rm.UserToRoom, userID)
                 delete(users, userID)

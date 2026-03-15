@@ -92,6 +92,7 @@ func Start() error {
     mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
     mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
     mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
+    mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
     mux.HandleFunc("/ws", JWTMiddleware(handleWS))
 
     handlerWithCORS := enableCORS(mux)
@@ -115,7 +116,6 @@ func StartUDP() error {
 	ln.SetReadBuffer(4194304) 
 	ln.SetWriteBuffer(4194304)
 
-    log.Printf("[UDP] Сервер запущен на %s", addr.String())
 
     for {
         buf := make([]byte, 2048)
@@ -136,14 +136,14 @@ func StartUDP() error {
             token, roomID := parts[1], parts[2]
             uid, err := authService.GetUserIDFromToken(token)
             if err != nil { 
-                log.Printf("[UDP] Ошибка токена от %s: %v", ipStr, err)
+                log.Printf("[UDP] token error %s: %v", ipStr, err)
                 continue 
             }
 
             // РЕГИСТРАЦИЯ: без этого GetParticipants всегда будет возвращать false
             isNew := rooms.AddUser(roomID, uid, remoteAddr, ln)
             if isNew {
-                log.Printf("[UDP] Пользователь %s вошел в комнату %s (%s)", uid, roomID, ipStr)
+                log.Printf("[UDP] user %s entered the room %s (%s)", uid, roomID, ipStr)
             }
             continue
         }
@@ -178,9 +178,7 @@ func StartUDP() error {
             // Рассылаем остальным
             go internal.SFU(packetCopy, participants, remoteAddr, ln)
         } else {
-            // Если мы здесь — значит аудио пришло раньше, чем обработался HELLO 
-            // или адрес отправителя не совпадает с тем, что был в HELLO
-            log.Printf("[UDP] Пакет от неизвестного адреса: %s", ipStr)
+            log.Printf("[UDP] packet from anonimous address: %s", ipStr)
         }
     }
 }

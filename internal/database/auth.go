@@ -6,7 +6,7 @@ import (
     "fmt"
     "os"
     "time"
-
+    "strings"
     "github.com/golang-jwt/jwt/v5"
     "golang.org/x/crypto/bcrypt"
 )
@@ -28,6 +28,7 @@ type Claims struct {
 
 // Методы остаются такими же, только привязаны к AuthService
 func (s *AuthService) Register(username, password, email, phone string) error {
+    username = strings.ToLower(strings.TrimSpace(username))
     if username == "" || password == "" {
         return errors.New("Логин и пароль не могут быть пустыми")
     }
@@ -41,6 +42,7 @@ func (s *AuthService) Register(username, password, email, phone string) error {
 }
 
 func (s *AuthService) Login(username, password string) (string, error) {
+    username = strings.ToLower(strings.TrimSpace(username))
     var id, storedHash string
     query := `SELECT id, password_hash FROM users WHERE username = $1 OR email = $1`
     err := s.db.QueryRow(query, username).Scan(&id, &storedHash)

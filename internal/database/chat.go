@@ -28,6 +28,7 @@ type Messages struct {
 	Created_at time.Time `json:"created_at"`
 }
 
+
 func (c *Repository)GetMessages(chat_id string) ([]*Messages, error){
 	query := `SELECT id, text, chat_id, sender_id, created_at FROM messages WHERE chat_id = $1`
 	rows, err := c.db.Query(query, chat_id)
@@ -84,4 +85,40 @@ func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error)
 		return  "", err
 	}
 	return id, nil
+}
+
+func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, error) {
+    var targetUserID string
+    
+    // 1. Находим ID собеседника
+    err := r.db.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", targetUsername).Scan(&targetUserID)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return "", fmt.Errorf("пользователь %s не найден", targetUsername)
+        }
+        return "", err
+    }
+
+    // 2. СОРТИРОВКА: всегда ставим меньший UUID первым
+    // Это гарантирует, что для пары пользователей всегда будет только ОДНА запись в БД
+    u1, u2 := userID, targetUserID
+    if u1 > u2 {
+        u1, u2 = u2, u1
+    }
+
+    var chatID string
+    // 3. Запрос к таблице chats с правильными полями
+    query := `
+	INSERT INTO chats (user_id1, user_id2)
+	VALUES ($1, $2)
+	ON CONFLICT (user_id1, user_id2) DO UPDATE 
+	SET user_id1 = EXCLUDED.user_id1 
+	RETURNING id;`
+
+    err = r.db.QueryRow(query, u1, u2).Scan(&chatID)
+    if err != nil {
+        return "", fmt.Errorf("SQL error: %v", err)
+    }
+
+    return chatID, nil
 }

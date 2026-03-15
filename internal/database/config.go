@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-
+	"log"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // Драйвер для PostgreSQL
 )
@@ -40,6 +40,6 @@ func InitDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("база данных недоступна: %v", err)
 	}
 
-	fmt.Println("Успешное подключение к PostgreSQL!")
+	log.Println("connected to PostgreSQL!")
 	return db, nil
 }

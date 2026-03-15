@@ -7,7 +7,26 @@ import (
 	"net"
 	"sync"
 	"golang.org/x/time/rate"
+    "context"
+    "github.com/golang-jwt/jwt/v5"
+    "errors"
 )
+
+func parseToken(tokenString string) (*Claims, error) {
+    token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+        return getJwtKey(), nil
+    })
+
+    if err != nil {
+        return nil, err
+    }
+
+    if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+        return claims, nil
+    }
+
+    return nil, errors.New("невалидный токен")
+}
 
 var (
     udpLimiter   = make(map[string]*rate.Limiter)
@@ -60,6 +79,8 @@ func enableCORS(next http.Handler) http.Handler {
     })
 }
 
+type contextKey string
+const UserIDKey contextKey = "userIDKey"
 
 // Проверка JWT токена
 func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -72,14 +93,19 @@ func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
         }
 
         tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        tokenString = strings.TrimSpace(tokenString)
 
-        isValid, err := authService.ValidateToken(tokenString)
-        if err != nil || !isValid {
+        claims, err := parseToken(tokenString) 
+        if err != nil {
             w.WriteHeader(http.StatusUnauthorized)
             json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired token"})
             return
         }
-        next(w, r)
+
+        ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+        
+        // 3. Передаем запрос дальше с новым контекстом
+        next(w, r.WithContext(ctx))
     }
 }
 
