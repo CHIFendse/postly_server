@@ -92,6 +92,7 @@ func Start() error {
     mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
     mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
     mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
+    mux.HandleFunc("/ws", JWTMiddleware(handleWS))
 
     handlerWithCORS := enableCORS(mux)
     finalHandler := limitMiddleware(limiter, handlerWithCORS)
@@ -183,3 +184,4 @@ func StartUDP() error {
         }
     }
 }
+

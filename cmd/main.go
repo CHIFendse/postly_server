@@ -3,9 +3,14 @@ package main
 import (
     "log"
     "backend/internal/protocol_stack" 
+    "github.com/joho/godotenv"
 )
 
 func main() {
+    err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Ошибка загрузки .env файла")
+    }
     log.Println("Сервер DisMes запускается...")
     go func() {
         log.Println("Запуск UDP на :8082 (голос)...")
