@@ -115,45 +115,45 @@ func StartUDP() error {
     defer ln.Close()
 	ln.SetReadBuffer(4194304) 
 	ln.SetWriteBuffer(4194304)
-
+    buf := make([]byte, 2048)
 
     for {
-        buf := make([]byte, 2048)
         n, remoteAddr, err := ln.ReadFromUDP(buf)
         if err != nil {
             continue
         }
-
-        data := buf[:n]
-        message := string(data)
+        if n < 3 {
+			continue
+		}
         ipStr := remoteAddr.String()
-
+        if buf[0] == 'H' || buf[0] == 'B' {
+            message := string(buf[:n])
         // А. ОБРАБОТКА ВХОДА (HELLO)
-        if strings.HasPrefix(message, "HELLO ") {
-            parts := strings.Split(message, " ")
-            if len(parts) < 3 { continue }
+            if strings.HasPrefix(message, "HELLO ") {
+                parts := strings.Split(message, " ")
+                if len(parts) < 3 { continue }
 
-            token, roomID := parts[1], parts[2]
-            uid, err := authService.GetUserIDFromToken(token)
-            if err != nil { 
-                log.Printf("[UDP] token error %s: %v", ipStr, err)
-                continue 
+                token, roomID := parts[1], parts[2]
+                uid, err := authService.GetUserIDFromToken(token)
+                if err != nil { 
+                    log.Printf("[UDP] token error %s: %v", ipStr, err)
+                    continue 
+                }
+
+                // РЕГИСТРАЦИЯ: без этого GetParticipants всегда будет возвращать false
+                isNew := rooms.AddUser(roomID, uid, remoteAddr, ln)
+                if isNew {
+                    log.Printf("[UDP] user %s entered the room %s (%s)", uid, roomID, ipStr)
+                }
+                continue
             }
 
-            // РЕГИСТРАЦИЯ: без этого GetParticipants всегда будет возвращать false
-            isNew := rooms.AddUser(roomID, uid, remoteAddr, ln)
-            if isNew {
-                log.Printf("[UDP] user %s entered the room %s (%s)", uid, roomID, ipStr)
+            // Б. ОБРАБОТКА ВЫХОДА (BYE)
+            if strings.HasPrefix(message, "BYE") {
+                rooms.RemoveUserByAddr(ipStr)
+                continue
             }
-            continue
         }
-
-        // Б. ОБРАБОТКА ВЫХОДА (BYE)
-        if strings.HasPrefix(message, "BYE") {
-            rooms.RemoveUserByAddr(ipStr)
-            continue
-        }
-
         // В. ОБРАБОТКА АУДИО
         // Теперь GetParticipants найдет участников, так как мы их добавили выше в HELLO
         if participants, ok := rooms.GetParticipants(ipStr); ok {
@@ -161,7 +161,7 @@ func StartUDP() error {
             
             if n >= 4 {
                 // Извлекаем Sequence Number для анализа потерь
-                seq := binary.BigEndian.Uint32(data[:4])
+                seq := binary.BigEndian.Uint32(buf[:4])
                 action := rooms.AnalyzePacketLoss(ipStr, seq)
                 
                 if action == "DOWN" {
@@ -172,7 +172,7 @@ func StartUDP() error {
             }
 
             // Рассылаем остальным
-            internal.SFU(data, participants, remoteAddr, ln)
+            internal.SFU(buf[:n], participants, remoteAddr, ln)
         } else {
             log.Printf("[UDP] packet from anonimous address: %s", ipStr)
         }
