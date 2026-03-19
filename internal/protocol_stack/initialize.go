@@ -171,12 +171,8 @@ func StartUDP() error {
                 }
             }
 
-            // Копируем данные для безопасной отправки в горутине
-            packetCopy := make([]byte, n)
-            copy(packetCopy, data)
-
             // Рассылаем остальным
-            go internal.SFU(packetCopy, participants, remoteAddr, ln)
+            internal.SFU(data, participants, remoteAddr, ln)
         } else {
             log.Printf("[UDP] packet from anonimous address: %s", ipStr)
         }
