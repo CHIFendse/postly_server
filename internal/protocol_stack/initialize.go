@@ -91,6 +91,7 @@ func Start() error {
     mux.HandleFunc("/verify", JWTMiddleware(handleVerify))
     mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
     mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
+    mux.HandleFunc("/getGroups", JWTMiddleware(handleGetGroups))
     mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
     mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
     mux.HandleFunc("/ws", JWTMiddleware(handleWS))
@@ -111,7 +112,10 @@ func StartUDP() error {
     }()
 	
     addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:8082")
-    ln, _ := net.ListenUDP("udp", addr)
+    ln, err := net.ListenUDP("udp", addr)
+    if err != nil {
+        return fmt.Errorf("failed to listed UDP: %w", err)
+    }
     defer ln.Close()
 	ln.SetReadBuffer(4194304) 
 	ln.SetWriteBuffer(4194304)
@@ -128,7 +132,6 @@ func StartUDP() error {
         ipStr := remoteAddr.String()
         if buf[0] == 'H' || buf[0] == 'B' {
             message := string(buf[:n])
-        // А. ОБРАБОТКА ВХОДА (HELLO)
             if strings.HasPrefix(message, "HELLO ") {
                 parts := strings.Split(message, " ")
                 if len(parts) < 3 { continue }

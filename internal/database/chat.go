@@ -16,8 +16,14 @@ func NewRepository(db *sql.DB) *Repository {
 
 type Chats struct {
 	Id string `json:"id"`
-	Username string `json:"username"`
+	Name string `json:"name"`
 	Created_at int `json:"created_at"`
+}
+
+type Groups struct {
+    Id        string       `json:"id"`
+    Name      string    `json:"name"`
+    CreatedAt time.Time `json:"created_at"`
 }
 
 type Messages struct {
@@ -28,9 +34,39 @@ type Messages struct {
 	Created_at time.Time `json:"created_at"`
 }
 
+func (c *Repository)GetGroups(id string) ([]*Groups, error){
+	query := `
+        SELECT g.id, g.name, g.created_at 
+        FROM groups g
+        JOIN group_members gm ON g.id = gm.group_id
+        WHERE gm.user_id = $1
+    `
 
+    rows, err := c.db.Query(query, id)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var groups []*Groups
+    for rows.Next() {
+        g := &Groups{}
+        err := rows.Scan(&g.Id, &g.Name, &g.CreatedAt)
+        if err != nil {
+            return nil, err
+        }
+        groups = append(groups, g)
+    }
+
+    // Если групп нет, возвращаем пустой слайс вместо nil для корректного JSON []
+    if groups == nil {
+        groups = []*Groups{}
+    }
+
+    return groups, nil
+}
 func (c *Repository)GetMessages(chat_id string) ([]*Messages, error){
-	query := `SELECT id, text, chat_id, sender_id, created_at FROM messages WHERE chat_id = $1`
+	query := `SELECT id, text, conversation_id, sender_id, created_at FROM messages WHERE conversation_id = $1`
 	rows, err := c.db.Query(query, chat_id)
 	if err != nil {
 		return nil, err
@@ -63,7 +99,7 @@ func (c *Repository) GetChats(id string) ([]*Chats, error){
 	chats := make([]*Chats, 0)
 	for rows.Next(){
 		m := new(Chats)
-		err := rows.Scan(&m.Id, &m.Username)
+		err := rows.Scan(&m.Id, &m.Name)
 		if err != nil {
 			return nil, err
 		} 
@@ -78,7 +114,7 @@ func (c *Repository) GetChats(id string) ([]*Chats, error){
 
 func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error){
 	var id string
-	query := `INSERT INTO Messages (chat_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
+	query := `INSERT INTO Messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
 	err := c.db.QueryRow(query, chat_id, sender_id, text).Scan(&id)
 	if err != nil {
 		fmt.Printf("err: %s", err)
@@ -87,35 +123,43 @@ func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error)
 	return id, nil
 }
 
-func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, error) {
+func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, string, error) {
     var targetUserID string
-    
-	
+    // 1. Ищем ID собеседника
     err := r.db.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", targetUsername).Scan(&targetUserID)
     if err != nil {
-        if err == sql.ErrNoRows {
-            return "", fmt.Errorf("пользователь %s не найден", targetUsername)
-        }
-        return "", err
+        return "", "", err
     }
 
     u1, u2 := userID, targetUserID
-    if u1 > u2 {
-        u1, u2 = u2, u1
+    if u1 > u2 { u1, u2 = u2, u1 }
+
+    // 2. Проверяем, существует ли уже чат между этими пользователями
+    var existingID string
+    err = r.db.QueryRow("SELECT id FROM chats WHERE user_id1 = $1 AND user_id2 = $2", u1, u2).Scan(&existingID)
+    if err == nil {
+        return existingID, targetUserID, nil // Чат уже есть, возвращаем его ID
     }
 
-    var chatID string
-    query := `
-	INSERT INTO chats (user_id1, user_id2)
-	VALUES ($1, $2)
-	ON CONFLICT (user_id1, user_id2) DO UPDATE 
-	SET user_id1 = EXCLUDED.user_id1 
-	RETURNING id;`
+    // 3. Если чата нет, создаем его через транзакцию
+    tx, err := r.db.Begin()
+    if err != nil { return "", "", err }
 
-    err = r.db.QueryRow(query, u1, u2).Scan(&chatID)
+    var newID string
+    // Создаем запись в родительской таблице
+    err = tx.QueryRow("INSERT INTO conversations (type) VALUES ('private') RETURNING id").Scan(&newID)
     if err != nil {
-        return "", fmt.Errorf("SQL error: %v", err)
+        tx.Rollback()
+        return "", "", err
     }
 
-    return chatID, nil
+    // Создаем запись в таблице chats, ВРУЧНУЮ передавая ID из conversations
+    _, err = tx.Exec("INSERT INTO chats (id, user_id1, user_id2) VALUES ($1, $2, $3)", newID, u1, u2)
+    if err != nil {
+        tx.Rollback()
+        return "", "", err
+    }
+
+    err = tx.Commit()
+    return newID, targetUserID, nil
 }
