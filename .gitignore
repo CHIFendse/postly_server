@@ -1,18 +1,42 @@
+# Исполняемые файлы (компиляция Go)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
 
-backend/*.exe
-backend/*.exe~
-backend/*.dll
-backend/*.so
-backend/*.dylib
-backend/bin/
+# Зависимости и рабочие пространства
+vendor/
+go.work
 
-backend/vendor/
-backend/go.work
+# Логи и временные файлы
+*.log
+tmp/
+logs/
 
-backend/*.log
-backend/tmp/
-backend/logs/
+# СЕКРЕТЫ (Самое важное!)
+.env
+.ENV
+config.yaml
+secrets/
+cmd/.env
+cmd/.ENV
 
-backend/.env
-backend/config.yaml
-backend/secrets/
+.cache_ggshield/
+
+# Windows NTFS alternate data streams
+*:Zone.Identifier
+
+# IDE (PyCharm / VS Code)
+.idea/
+*.iml
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Идентификаторы и метаданные ОС
+.DS_Store
+Thumbs.db
+.directory
+*~
