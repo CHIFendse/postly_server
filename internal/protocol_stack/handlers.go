@@ -172,6 +172,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
+    fmt.Println("тут есть")
     if r.Method != http.MethodPost {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
@@ -186,12 +187,14 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
     if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
         http.Error(w, "Bad request", http.StatusBadRequest)
+        fmt.Println("Ошибка:", err.Error())
         return
     }
 
     // Вызываем метод из твоего auth_service.go
     err := authService.Register(data.Username, data.Password, data.Email, data.Phone)
     if err != nil {
+        fmt.Println("Ошибка:", err.Error())
         w.WriteHeader(http.StatusConflict)
         json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
         return
