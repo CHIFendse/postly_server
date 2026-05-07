@@ -85,6 +85,7 @@ func enableCORS(next http.Handler) http.Handler {
     })
 }
 
+
 type contextKey string
 const UserIDKey contextKey = "userIDKey"
 

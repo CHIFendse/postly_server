@@ -10,7 +10,6 @@ import (
     "sync"
     "os"
     "github.com/golang-jwt/jwt/v5"
-    "time"
 )
 
 //-----------------------------------------------------РАБОТА С WEBSOCKET----------------------------------------------------
@@ -59,65 +58,60 @@ func broadcast(chatID string, message []byte) {
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
     upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-    chatID := r.URL.Query().Get("chat_id")
 
-    // 4. Проверка
     userID, ok := r.Context().Value(UserIDKey).(string)
     if !ok || userID == "" {
-        // Если в контексте пусто, а chatID нет — выходим
-        if chatID == "" {
-            log.Printf("WS Reject: Missing chat_id")
-            http.Error(w, "Missing chat_id", http.StatusBadRequest)
-            return
-        }
-        // Если Middleware не передает ID через контекст, можно временно ставить "anon"
-        // или достать ID из claims вручную еще раз, если Middleware передает объект claims.
-        userID = "user_" + fmt.Sprintf("%d", time.Now().Unix()) 
-    }
-    conn, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        log.Printf("WS Upgrade Error: %v", err)
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
         return
     }
 
+    conn, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        return
+    }
+
+    // 1. Глобальная регистрация
     userConnsMu.Lock()
     userConns[userID] = conn
     userConnsMu.Unlock()
 
-    // РЕГИСТРАЦИЯ В КОМНАТЕ (твой старый код)
-    if chatID != "" {
-        roomsMu.Lock()
-        if rooms[chatID] == nil {
-            rooms[chatID] = make(map[string]*websocket.Conn)
+    // 2. РЕГИСТРАЦИЯ В КОМНАТАХ (Делаем ОДИН РАЗ при подключении)
+    // Достаем все чаты, в которых состоит пользователь, и подписываем его на них
+    userChats, _ := repo.GetChats(userID) // добавь пустой токен или как там у тебя в методе
+    roomsMu.Lock()
+    for _, chat := range userChats {
+        cID := chat.Id
+        if rooms[cID] == nil {
+            rooms[cID] = make(map[string]*websocket.Conn)
         }
-        rooms[chatID][userID] = conn
-        roomsMu.Unlock()
+        rooms[cID][userID] = conn
     }
+    roomsMu.Unlock()
 
-    // 6. Очистка при закрытии
     defer func() {
         userConnsMu.Lock()
         delete(userConns, userID)
         userConnsMu.Unlock()
 
+        // Чистим пользователя из всех комнат при выходе
         roomsMu.Lock()
-        if clientsInRoom, ok := rooms[chatID]; ok {
-            delete(clientsInRoom, userID)
-            if len(clientsInRoom) == 0 {
-                delete(rooms, chatID)
+        for _, chat := range userChats {
+            cID := chat.Id
+            if clients, ok := rooms[cID]; ok {
+                delete(clients, userID)
             }
         }
         roomsMu.Unlock()
         conn.Close()
-        log.Printf("WS: user %s left the room %s", userID, chatID)
     }()
 
-    // 7. Цикл прослушивания
+    // 3. ЦИКЛ ОБРАБОТКИ
     for {
         _, p, err := conn.ReadMessage()
         if err != nil {
-            break // Соединение закрыто
+            break
         }
+
         var msgData struct {
             SenderID string `json:"sender_id"`
             Text     string `json:"text"`
@@ -125,35 +119,36 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         }
 
         if err := json.Unmarshal(p, &msgData); err != nil {
-            log.Printf("WS: error of parsing JSON: %v", err)
-            continue // Пропускаем битое сообщение
+            continue
         }
 
-        // 2. Записываем в БД
-        // Используем msgData.ChatID или chatID из параметров подключения
-        // (лучше msgData.ChatID для надежности)
-        _, err = repo.AddMessage(msgData.ChatID, msgData.SenderID, msgData.Text)
+        // Сохраняем в БД
+        newMsg, err := repo.AddMessage(msgData.ChatID, userID, msgData.Text)
         if err != nil {
-            log.Printf("WS: error write to db: %v", err)
-            // Можно отправить клиенту персональную ошибку через conn.WriteJSON
-            continue 
+            continue
         }
 
-        // 3. Подготавливаем финальный объект для рассылки
-        // Теперь у нас есть ID из базы и, возможно, timestamp
-        finalMessage := map[string]interface{}{
-            "chat_id":   msgData.ChatID,
-            "sender_id": msgData.SenderID,
-            "text":      msgData.Text,
-            "time":      time.Now().Format(time.RFC3339),
-        }
+        // Формируем пакет
+        finalPayload, _ := json.Marshal(map[string]interface{}{
+            "type": "NEW_MESSAGE",
+            "data": newMsg,
+        })
 
-        finalPayload, _ := json.Marshal(finalMessage)
-        // Рассылаем сообщение ТОЛЬКО в текущую комнату
-        broadcast(chatID, finalPayload) 
+        // 4. РАССЫЛКА (Broadcast)
+        // Отправляем всем, кто сейчас "подписан" на эту комнату
+        roomsMu.Lock()
+        if clients, ok := rooms[msgData.ChatID]; ok {
+            for _, clientConn := range clients {
+                clientConn.WriteMessage(websocket.TextMessage, finalPayload)
+            }
+        } else {
+            // Если комнаты нет в памяти (например, первый месседж), 
+            // отправляем хотя бы себе
+            conn.WriteMessage(websocket.TextMessage, finalPayload)
+        }
+        roomsMu.Unlock()
     }
-}   
-
+}
 
 
 //--------------------------------------------------РАБОТА С HTTP ЗАПРОСАМИ----------------------------------------------------
