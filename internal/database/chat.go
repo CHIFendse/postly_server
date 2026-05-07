@@ -163,3 +163,13 @@ func (r *Repository) CreateNewChat(userID string, targetUsername string) (string
     err = tx.Commit()
     return newID, targetUserID, nil
 }
+
+
+func (r *Repository) GetChatParticipants(chatID string) ([]string, error) {
+    var u1, u2 string
+    err := r.db.QueryRow("SELECT user1_id, user2_id FROM chats WHERE id = $1", chatID).Scan(&u1, &u2)
+    if err != nil {
+        return nil, err
+    }
+    return []string{u1, u2}, nil
+}
