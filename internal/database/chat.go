@@ -178,7 +178,7 @@ func (r *Repository) CreateNewChat(userID string, targetUsername string) (string
     }
 
     // Создаем запись в таблице chats, ВРУЧНУЮ передавая ID из conversations
-    _, err = tx.Exec("INSERT INTO chats (id, user_id1, user_id2) VALUES ($1, $2, $3)", newID, u1, u2)
+    _, err = tx.Exec("INSERT INTO chats (id, user_id1, user_id2, updated_at) VALUES ($1, $2, $3, NOW())", newID, u1, u2)
     if err != nil {
         tx.Rollback()
         return "", "", err
