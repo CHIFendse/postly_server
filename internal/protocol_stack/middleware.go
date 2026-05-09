@@ -10,7 +10,6 @@ import (
     "context"
     "github.com/golang-jwt/jwt/v5"
     "errors"
-    "log"
 )
 
 func parseToken(tokenString string) (*Claims, error) {
@@ -67,7 +66,6 @@ func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
 // CORS
 func enableCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        log.Printf("Hello, eCORS\n")
         // Устанавливаем заголовки
         w.Header().Set("Access-Control-Allow-Origin", "*") 
         w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -120,7 +118,6 @@ func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // Ограничение отправки запросов в HTTP
 func limitMiddleware(limiter *IPRateLimiter, next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        log.Printf("Hello, limit!\n")
         ip, _, err := net.SplitHostPort(r.RemoteAddr)
         if err != nil {
             http.Error(w, "Internal Server Error", http.StatusInternalServerError)

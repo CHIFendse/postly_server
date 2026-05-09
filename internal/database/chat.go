@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"time"
 	"fmt"
-    "strconv"
 )
 
 type Repository struct {
@@ -120,31 +119,40 @@ func (c *Repository) GetChats(id string) ([]*Chats, error){
 	return chats, nil
 }
 
-func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error){
+func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error) {
     tx, err := c.db.Begin()
     if err != nil {
         return "", err
     }
-	query := `INSERT INTO messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
-	res, err := tx.Exec(query, chat_id, sender_id, text)
-	if err != nil {
-        fmt.Println("Ошибка добавления сообщения в messages:", err.Error())
-        tx.Rollback()
+    defer tx.Rollback() 
+
+    // 1. МЕНЯЕМ ТИП НА string, так как в базе это UUID
+    var newID string 
+    query := `INSERT INTO messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
+    
+    // 2. Сканируем сразу в строку
+    err = tx.QueryRow(query, chat_id, sender_id, text).Scan(&newID)
+    if err != nil {
+        fmt.Println("Ошибка добавления сообщения:", err)
         return "", err
     }
+
     _, err = tx.Exec(`
         UPDATE chats 
         SET last_message = $1, updated_at = NOW()
         WHERE id = $2`, 
         text, chat_id)
     if err != nil {
-        tx.Rollback()
         return "", err
     }
-    id, _ := res.LastInsertId()
-    idStr := strconv.FormatInt(id, 10)
-    tx.Commit()
-	return idStr, nil
+
+    err = tx.Commit()
+    if err != nil {
+        return "", err
+    }
+
+    // 3. Возвращаем уже готовую строку UUID
+    return newID, nil
 }
 
 func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, string, error) {
@@ -191,9 +199,14 @@ func (r *Repository) CreateNewChat(userID string, targetUsername string) (string
 
 func (r *Repository) GetChatParticipants(chatID string) ([]string, error) {
     var u1, u2 string
-    err := r.db.QueryRow("SELECT user1_id, user2_id FROM chats WHERE id = $1", chatID).Scan(&u1, &u2)
+    
+    // Используем правильные имена колонок (user_id1, user_id2)
+    err := r.db.QueryRow("SELECT user_id1, user_id2 FROM chats WHERE id = $1", chatID).Scan(&u1, &u2)
+    
     if err != nil {
+        fmt.Printf("ОШИБКА В GetChatParticipants: %v\n", err)
         return nil, err
     }
+    
     return []string{u1, u2}, nil
 }

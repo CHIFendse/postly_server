@@ -11,7 +11,13 @@ import (
     "os"
     "github.com/golang-jwt/jwt/v5"
 )
-
+const (
+    TypeNewMessage = "NEW_MESSAGE"
+    TypeCallInvite = "CALL_INVITE"
+    TypeCallAccept = "CALL_ACCEPT"
+    TypeCallReject = "CALL_REJECT"
+    TypeCallHangup = "CALL_HANGUP"
+)
 //-----------------------------------------------------РАБОТА С WEBSOCKET----------------------------------------------------
 var upgrader = websocket.Upgrader{
     CheckOrigin: func(r *http.Request) bool {
@@ -117,97 +123,48 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
     for {
         _, p, err := conn.ReadMessage()
         if err != nil {
-            log.Printf("WS Read Error from %s: %v", userID, err)
             break
         }
-
-        var msgData struct {
-            SenderID string `json:"sender_id"`
-            Text     string `json:"text"`
-            ChatID   string `json:"chat_id"`
+        
+        // Сначала парсим заголовок, чтобы понять тип
+        var raw map[string]interface{}
+        if err := json.Unmarshal(p, &raw); err != nil {
+            continue
         }
-
-        if err := json.Unmarshal(p, &msgData); err != nil {
-            log.Printf("WS JSON Error: %v", err)
+        msgType, _ := raw["type"].(string)
+        chatID, _ := raw["chat_id"].(string)
+        // --- ЛОГИКА ЗВОНКОВ (Signaling) ---
+        if msgType == TypeCallInvite || msgType == TypeCallAccept || msgType == TypeCallReject || msgType == TypeCallHangup {
+            // Сигналы звонка МЫ НЕ СОХРАНЯЕМ В БД. Просто пересылаем.
+            log.Printf("Call Signal: %s from %s in chat %s", msgType, userID, chatID)
+            broadcastToOtherParticipants(chatID, userID, p)
             continue
         }
 
-        // Динамическая проверка комнаты (на случай если чат только что создали)
-        roomsMu.Lock()
-        if rooms[msgData.ChatID] == nil {
-            rooms[msgData.ChatID] = make(map[string]*websocket.Conn)
-        }
-        rooms[msgData.ChatID][userID] = conn
-        roomsMu.Unlock()
+        // --- ЛОГИКА ОБЫЧНЫХ СООБЩЕНИЙ ---
+        text, _ := raw["text"].(string)
+        if text == "" && msgType == "" { continue }
 
-        // 5. Сохранение сообщения в БД
-        id, err := repo.AddMessage(msgData.ChatID, userID, msgData.Text)
+        // Сохраняем в БД только реальные сообщения
+        id, err := repo.AddMessage(chatID, userID, text)
         if err != nil {
-            log.Printf("DB Error (AddMessage): %v", err)
+            log.Printf("DB Error: %v", err)
             continue
         }
-
-        // 6. Подготовка пакета для рассылки
+        // Формируем пакет для рассылки
         broadcastData := map[string]interface{}{
-            "type":      "NEW_MESSAGE",
+            "type":      TypeNewMessage,
             "id":        id,
-            "chat_id":   msgData.ChatID,
+            "chat_id":   chatID,
             "sender_id": userID,
-            "text":      msgData.Text,
+            "text":      text,
         }
-
         finalPayload, _ := json.Marshal(broadcastData)
-
-        // 7. УМНАЯ РАССЫЛКА
-        // Сначала рассылаем тем, кто уже "сидит" в комнате в памяти
-        roomsMu.Lock()
-        recipientsInRoom := make(map[string]bool)
-        if clients, ok := rooms[msgData.ChatID]; ok {
-            for rID, clientConn := range clients {
-                clientConn.WriteMessage(websocket.TextMessage, finalPayload)
-                recipientsInRoom[rID] = true
-            }
-        }
-        roomsMu.Unlock()
-
-        // Теперь пытаемся достучаться до остальных участников, которые онлайн,
-        // но еще не в комнате (важно для новых чатов)
-        participants, err := repo.GetChatParticipants(msgData.ChatID)
-        if err == nil {
-            for _, pID := range participants {
-                // Если мы ему еще не отправили через комнату
-                if !recipientsInRoom[pID] {
-                    userConnsMu.Lock()
-                    if targetConn, online := userConns[pID]; online {
-                        targetConn.WriteMessage(websocket.TextMessage, finalPayload)
-                        
-                        // Заодно "подписываем" его на комнату на будущее
-                        roomsMu.Lock()
-                        rooms[msgData.ChatID][pID] = targetConn
-                        roomsMu.Unlock()
-                    }
-                    userConnsMu.Unlock()
-                }
-            }
-        }
+        broadcastToOtherParticipants(chatID, userID, finalPayload)
     }
 }
 
 //--------------------------------------------------РАБОТА С HTTP ЗАПРОСАМИ----------------------------------------------------
-func handleHTTP(w http.ResponseWriter, r *http.Request) {
-    if r.Method == http.MethodGet {
-        w.Header().Set("Content-Type", "application/json")
-        
-        response := Response{Status: true}
-
-        err := json.NewEncoder(w).Encode(response)
-        if err != nil {
-            http.Error(w, "error encoding JSON", http.StatusInternalServerError)
-            return
-        }
-    }
-}
-
 func handleRegister(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -476,5 +433,38 @@ func handleGetGroups(w http.ResponseWriter, r *http.Request) {
     if err := json.NewEncoder(w).Encode(resp); err != nil {
         // Логируем ошибку, если не удалось отправить JSON
         return
+    }
+}
+
+
+func broadcastToOtherParticipants(chatID string, senderID string, payload []byte) {
+    // 1. Получаем список участников из БД
+    participants, err := repo.GetChatParticipants(chatID)
+    if err != nil {
+        return
+    }
+    for _, pID := range participants {
+        userConnsMu.Lock()
+        if targetConn, online := userConns[pID]; online {
+            err := targetConn.WriteMessage(websocket.TextMessage, payload)
+            if err != nil {
+                log.Printf("Send Error to %s: %v", pID, err)
+            }
+        }
+        userConnsMu.Unlock()
+    }
+}
+
+func handleHTTP(w http.ResponseWriter, r *http.Request) {
+    if r.Method == http.MethodGet {
+        w.Header().Set("Content-Type", "application/json")
+        
+        response := Response{Status: true}
+
+        err := json.NewEncoder(w).Encode(response)
+        if err != nil {
+            http.Error(w, "error encoding JSON", http.StatusInternalServerError)
+            return
+        }
     }
 }
