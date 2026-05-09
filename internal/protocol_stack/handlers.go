@@ -141,17 +141,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         roomsMu.Unlock()
 
         // 5. Сохранение сообщения в БД
-        newMsg, err := repo.AddMessage(msgData.ChatID, userID, msgData.Text)
+        id, err := repo.AddMessage(msgData.ChatID, userID, msgData.Text)
         if err != nil {
             log.Printf("DB Error (AddMessage): %v", err)
             continue
         }
 
         // 6. Подготовка пакета для рассылки
-        finalPayload, _ := json.Marshal(map[string]interface{}{
-            "type": "NEW_MESSAGE",
-            "data": newMsg, // Здесь структура сообщения из БД (id, text, chat_id, etc.)
-        })
+        broadcastData := map[string]interface{}{
+            "type":      "NEW_MESSAGE",
+            "id":        id,
+            "chat_id":   msgData.ChatID,
+            "sender_id": userID,
+            "text":      msgData.Text,
+        }
+
+        finalPayload, _ := json.Marshal(broadcastData)
 
         // 7. УМНАЯ РАССЫЛКА
         // Сначала рассылаем тем, кто уже "сидит" в комнате в памяти
@@ -204,7 +209,6 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
-    fmt.Println("тут есть")
     if r.Method != http.MethodPost {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
@@ -228,7 +232,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
     if err != nil {
         fmt.Println("Ошибка:", err.Error())
         w.WriteHeader(http.StatusConflict)
-        json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+        json.NewEncoder(w).Encode(map[string]error{"error": err})
         return
     }
 
@@ -412,23 +416,38 @@ func handleCreateChat(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(map[string]string{"id": createdChatID})
 
+    // РЕГИСТРАЦИЯ В ПАМЯТИ (ROOMS)
+    roomsMu.Lock()
+    if rooms[createdChatID] == nil {
+        rooms[createdChatID] = make(map[string]*websocket.Conn)
+    }
+    
     userConnsMu.Lock()
-    if conn, ok := userConns[targetID]; ok {
+    // 1. Регистрируем создателя (он точно онлайн, раз отправил запрос)
+    if creatorConn, ok := userConns[data.UserId]; ok {
+        rooms[createdChatID][data.UserId] = creatorConn
+    }
+
+    // 2. Проверяем таргет и уведомляем его
+    if targetConn, ok := userConns[targetID]; ok {
+        rooms[createdChatID][targetID] = targetConn
+        
         notification := map[string]interface{}{
             "type": "NEW_CHAT",
             "data": map[string]string{
                 "chat_id": createdChatID,
             },
         }
-        err := conn.WriteJSON(notification)
+        
+        err := targetConn.WriteJSON(notification)
         if err != nil {
-            log.Printf("Failed to send WS notification to %s: %v", targetID, err)
-            // Если соединение битое, лучше его закрыть/удалить
-            conn.Close()
+            log.Printf("Failed to send notification: %v", err)
+            targetConn.Close()
             delete(userConns, targetID)
         }
     }
     userConnsMu.Unlock()
+    roomsMu.Unlock()
 }
 
 func handleGetGroups(w http.ResponseWriter, r *http.Request) {

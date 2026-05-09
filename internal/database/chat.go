@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"time"
 	"fmt"
+    "strconv"
 )
 
 type Repository struct {
@@ -15,9 +16,10 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 type Chats struct {
-	Id string `json:"id"`
-	Name string `json:"name"`
-	Created_at int `json:"created_at"`
+	Id          string          `json:"id"`
+	Name        string          `json:"name"`
+    LastMsg     string          `json:"last_message"`
+	Created_at  int             `json:"created_at"`
 }
 
 type Groups struct {
@@ -89,7 +91,7 @@ func (c *Repository)GetMessages(chat_id string) ([]*Messages, error){
 }
 
 func (c *Repository) GetChats(id string) ([]*Chats, error){
-	query := "SELECT c.id, u.username FROM chats c JOIN users u ON u.id = CASE WHEN c.user_id1 = $1 THEN c.user_id2 ELSE c.user_id1 END WHERE c.user_id1 = $1 OR c.user_id2 = $1;"
+	query := "SELECT c.id, u.username, c.last_message FROM chats c JOIN users u ON u.id = CASE WHEN c.user_id1 = $1 THEN c.user_id2 ELSE c.user_id1 END WHERE c.user_id1 = $1 OR c.user_id2 = $1 ORDER BY c.updated_at DESC;"
 	rows, err := c.db.Query(query, id)
 	if err != nil {
 		return nil, err
@@ -97,12 +99,18 @@ func (c *Repository) GetChats(id string) ([]*Chats, error){
 	defer rows.Close()
 
 	chats := make([]*Chats, 0)
+    var lastMsg sql.NullString
 	for rows.Next(){
 		m := new(Chats)
-		err := rows.Scan(&m.Id, &m.Name)
+		err := rows.Scan(&m.Id, &m.Name, &lastMsg)
 		if err != nil {
 			return nil, err
 		} 
+        if lastMsg.Valid {
+            m.LastMsg = lastMsg.String
+        } else {
+            m.LastMsg = ""
+        }
 		chats = append(chats, m)
 	}
 	if err = rows.Err(); err != nil {
@@ -113,14 +121,30 @@ func (c *Repository) GetChats(id string) ([]*Chats, error){
 }
 
 func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error){
-	var id string
-	query := `INSERT INTO Messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
-	err := c.db.QueryRow(query, chat_id, sender_id, text).Scan(&id)
+    tx, err := c.db.Begin()
+    if err != nil {
+        return "", err
+    }
+	query := `INSERT INTO messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
+	res, err := tx.Exec(query, chat_id, sender_id, text)
 	if err != nil {
-		fmt.Printf("err: %s", err)
-		return  "", err
-	}
-	return id, nil
+        fmt.Println("Ошибка добавления сообщения в messages:", err.Error())
+        tx.Rollback()
+        return "", err
+    }
+    _, err = tx.Exec(`
+        UPDATE chats 
+        SET last_message = $1, updated_at = NOW()
+        WHERE id = $2`, 
+        text, chat_id)
+    if err != nil {
+        tx.Rollback()
+        return "", err
+    }
+    id, _ := res.LastInsertId()
+    idStr := strconv.FormatInt(id, 10)
+    tx.Commit()
+	return idStr, nil
 }
 
 func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, string, error) {
