@@ -84,6 +84,7 @@ func (c *Repository) GetId(username string) (string, error) {
     return id, nil
 }
 
+
 func (s *AuthService) GetUserIDFromToken(tokenString string) (string, error) {
     jwtSecret := os.Getenv("JWT_SECRET")
     token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {

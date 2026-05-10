@@ -144,7 +144,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         // --- ЛОГИКА ОБЫЧНЫХ СООБЩЕНИЙ ---
         text, _ := raw["text"].(string)
         if text == "" && msgType == "" { continue }
-
+        senderName, _ := raw["username"].(string)
         // Сохраняем в БД только реальные сообщения
         id, err := repo.AddMessage(chatID, userID, text)
         if err != nil {
@@ -158,6 +158,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
             "chat_id":   chatID,
             "sender_id": userID,
             "text":      text,
+            "username":  senderName,
         }
         finalPayload, _ := json.Marshal(broadcastData)
         broadcastToOtherParticipants(chatID, userID, finalPayload)
@@ -180,20 +181,26 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
     if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
         http.Error(w, "Bad request", http.StatusBadRequest)
-        fmt.Println("Ошибка:", err.Error())
         return
     }
 
     // Вызываем метод из твоего auth_service.go
     err := authService.Register(data.Username, data.Password, data.Email, data.Phone)
     if err != nil {
-        fmt.Println("Ошибка:", err.Error())
+        w.Header().Set("Content-Type", "application/json")
+        errMsg := "Ошибка регистрации"
+        fmt.Println(err.Error())
+        if strings.Contains(err.Error(), "users_email_key") && strings.Contains(err.Error(), "23505"){
+            errMsg = "Пользователь с такой почтой уже существует"
+        } else if strings.Contains(err.Error(), "users_username_key")  && strings.Contains(err.Error(), "23505") {
+            errMsg = "Пользователь с таким именем уже существует"
+        }
         w.WriteHeader(http.StatusConflict)
-        json.NewEncoder(w).Encode(map[string]error{"error": err})
+        json.NewEncoder(w).Encode(map[string]string{"message": errMsg})
         return
     }
 
-    w.WriteHeader(http.StatusCreated)
+    w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(map[string]bool{"status": true})
 }
 
@@ -444,6 +451,9 @@ func broadcastToOtherParticipants(chatID string, senderID string, payload []byte
         return
     }
     for _, pID := range participants {
+        if pID == senderID{
+            continue
+        }
         userConnsMu.Lock()
         if targetConn, online := userConns[pID]; online {
             err := targetConn.WriteMessage(websocket.TextMessage, payload)

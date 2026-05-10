@@ -15,10 +15,11 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 type Chats struct {
-	Id          string          `json:"id"`
-	Name        string          `json:"name"`
-    LastMsg     string          `json:"last_message"`
-	Created_at  int             `json:"created_at"`
+	Id            string          `json:"id"`
+	Name          string          `json:"name"`
+    LastMsg       string          `json:"last_message"`
+    LastMsgSender string          `json:"username"`
+    UpdatedAt      int             `json:"updated_at"`
 }
 
 type Groups struct {
@@ -90,33 +91,45 @@ func (c *Repository)GetMessages(chat_id string) ([]*Messages, error){
 }
 
 func (c *Repository) GetChats(id string) ([]*Chats, error){
-	query := "SELECT c.id, u.username, c.last_message FROM chats c JOIN users u ON u.id = CASE WHEN c.user_id1 = $1 THEN c.user_id2 ELSE c.user_id1 END WHERE c.user_id1 = $1 OR c.user_id2 = $1 ORDER BY c.updated_at DESC;"
-	rows, err := c.db.Query(query, id)
+	query := `
+        SELECT 
+            c.id, 
+            u.username AS chat_name, 
+            COALESCE(c.last_message, ''), 
+            COALESCE(sender.username, ''),
+            EXTRACT(EPOCH FROM (c.updated_at AT TIME ZONE 'Europe/Moscow' AT TIME ZONE 'UTC'))::INT
+        FROM chats c 
+        JOIN users u ON u.id = (
+            CASE 
+                WHEN c.user_id1 = $1::uuid THEN c.user_id2
+                ELSE c.user_id1 
+            END
+        )::uuid -- Явное приведение результата CASE к UUID
+        LEFT JOIN users sender ON sender.id = c.last_msg_sender::uuid -- Приведение отправителя
+        WHERE c.user_id1 = $1::uuid OR c.user_id2 = $1::uuid 
+        ORDER BY c.updated_at DESC;`
+
+    // Остальной код без изменений...
+    rows, err := c.db.Query(query, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	chats := make([]*Chats, 0)
-    var lastMsg sql.NullString
-	for rows.Next(){
-		m := new(Chats)
-		err := rows.Scan(&m.Id, &m.Name, &lastMsg)
-		if err != nil {
-			return nil, err
-		} 
-        if lastMsg.Valid {
-            m.LastMsg = lastMsg.String
-        } else {
-            m.LastMsg = ""
-        }
-		chats = append(chats, m)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
+	chats := []*Chats{} 
+    
+    for rows.Next(){
+        m := new(Chats)
+        // Теперь сканируем 5 полей
+        err := rows.Scan(&m.Id, &m.Name, &m.LastMsg, &m.LastMsgSender, &m.UpdatedAt)
+        if err != nil {
+            fmt.Println("Ошибка Scan:", err)
+            return nil, err
+        } 
+        chats = append(chats, m)
+    }
 
-	return chats, nil
+    return chats, nil
 }
 
 func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error) {
@@ -139,9 +152,9 @@ func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error)
 
     _, err = tx.Exec(`
         UPDATE chats 
-        SET last_message = $1, updated_at = NOW()
-        WHERE id = $2`, 
-        text, chat_id)
+        SET last_message = $1, last_msg_sender = $2, updated_at = NOW()
+        WHERE id = $3`, 
+        text, sender_id, chat_id)
     if err != nil {
         return "", err
     }
@@ -209,4 +222,14 @@ func (r *Repository) GetChatParticipants(chatID string) ([]string, error) {
     }
     
     return []string{u1, u2}, nil
+}
+
+func (c *Repository) GetUserFromID(id string) (string, error) {
+    var username string
+    query := "SELECT username FROM users WHERE id = $1"
+    err := c.db.QueryRow(query, id).Scan(&username)
+    if err != nil{
+        return "", err
+    }
+    return username, nil
 }
