@@ -90,15 +90,16 @@ const UserIDKey contextKey = "userIDKey"
 // Проверка JWT токена
 func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        authHeader := r.Header.Get("Authorization")
-        if authHeader == "" {
+        tokenString := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+        tokenString = strings.TrimSpace(tokenString)
+        if tokenString == "" {
+            tokenString = r.URL.Query().Get("token")
+        }
+        if tokenString == "" {
             w.WriteHeader(http.StatusUnauthorized)
             json.NewEncoder(w).Encode(map[string]string{"error": "Missing auth token"})
             return
         }
-
-        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-        tokenString = strings.TrimSpace(tokenString)
 
         claims, err := parseToken(tokenString) 
         if err != nil {
