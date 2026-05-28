@@ -9,6 +9,7 @@ import (
     "github.com/gorilla/websocket"
     "sync"
     "os"
+    "time"
     "github.com/golang-jwt/jwt/v5"
 )
 const (
@@ -98,7 +99,18 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         }
         roomsMu.Unlock()
     }
-
+    userGroups, err := repo.GetGroups(userID)
+    if err == nil {
+        roomsMu.Lock()
+        for _, group := range userGroups {
+            gID := group.Id
+            if rooms[gID] == nil {
+                rooms[gID] = make(map[string]*websocket.Conn)
+            }
+            rooms[gID][userID] = conn
+        }
+        roomsMu.Unlock()
+    }
     // Очистка при отключении
     defer func() {
         userConnsMu.Lock()
@@ -145,22 +157,30 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         text, _ := raw["text"].(string)
         if text == "" && msgType == "" { continue }
         senderName, _ := raw["username"].(string)
-        // Сохраняем в БД только реальные сообщения
+
         id, err := repo.AddMessage(chatID, userID, text)
         if err != nil {
             log.Printf("DB Error: %v", err)
             continue
         }
-        // Формируем пакет для рассылки
+
         broadcastData := map[string]interface{}{
-            "type":      TypeNewMessage,
-            "id":        id,
-            "chat_id":   chatID,
-            "sender_id": userID,
-            "text":      text,
-            "username":  senderName,
+            "type":       TypeNewMessage,
+            "id":         id,
+            "chat_id":    chatID,
+            "sender_id":  userID,
+            "text":       text,
+            "username":   senderName,
+            "updated_at": time.Now().Unix(),
         }
+
+        log.Printf("Broadcasting message: chatID=%s, text=%s", chatID, text) // ← ДОБАВЬ
+
         finalPayload, _ := json.Marshal(broadcastData)
+
+        // Сначала отправляем всем в комнате
+        broadcast(chatID, finalPayload)
+        // Потом пробуем отправить конкретным участникам
         broadcastToOtherParticipants(chatID, userID, finalPayload)
     }
 }
@@ -291,7 +311,6 @@ func handleGetMessages(w http.ResponseWriter, r *http.Request){
         return
     }
 }
-
 func handleGetChats(w http.ResponseWriter, r *http.Request){
     if r.Method != http.MethodPost {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -307,20 +326,21 @@ func handleGetChats(w http.ResponseWriter, r *http.Request){
         return
     }
 
-    // Вызываем метод из твоего auth_service.go
     resp, err := repo.GetChats(data.Id)
     if err != nil {
-        w.WriteHeader(http.StatusConflict)
-        json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+        log.Printf("GetChats Error: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Could not get chats"})
         return
     }
 
+    w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusOK)
     if err := json.NewEncoder(w).Encode(resp); err != nil {
-        // Логируем ошибку, если не удалось отправить JSON
-        return
+        log.Printf("GetChats encode error: %v", err)
     }
 }
+
 
 func handleAddMessage(w http.ResponseWriter, r *http.Request){
     if r.Method != http.MethodPost {
@@ -414,6 +434,56 @@ func handleCreateChat(w http.ResponseWriter, r *http.Request) {
     roomsMu.Unlock()
 }
 
+func handleCreateGroup(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var data struct {
+        AdminId   string   `json:"admin_id"`
+        Name      string   `json:"name"`
+        IsPrivate bool     `json:"is_private"`
+        Members   []string `json:"members"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+        http.Error(w, "Bad request", http.StatusBadRequest)
+        return
+    }
+
+    if data.AdminId == "" || data.Name == "" {
+        http.Error(w, "Missing required fields", http.StatusBadRequest)
+        return
+    }
+    fmt.Println(data.Members)
+    createdGroupID, err := repo.CreateNewGroup(data.Name, data.AdminId, data.IsPrivate, data.Members)
+    if err != nil {
+        log.Printf("CreateGroup Error: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Could not create group"})
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(map[string]string{
+        "id":   createdGroupID,
+        "name": data.Name,
+    })
+
+    roomsMu.Lock()
+    defer roomsMu.Unlock()
+    if rooms[createdGroupID] == nil {
+        rooms[createdGroupID] = make(map[string]*websocket.Conn)
+    }
+    userConnsMu.Lock()
+    if adminConn, ok := userConns[data.AdminId]; ok {
+        rooms[createdGroupID][data.AdminId] = adminConn
+    }
+    userConnsMu.Unlock()
+}
+
 func handleGetGroups(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -429,29 +499,39 @@ func handleGetGroups(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    log.Printf("GetGroups request for user: %s", data.Id)
+
     resp, err := repo.GetGroups(data.Id)
     if err != nil {
-        w.WriteHeader(http.StatusConflict)
-        json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+        log.Printf("GetGroups Error: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Could not get groups"})
         return
     }
 
+    log.Printf("GetGroups found %d groups", len(resp))
+
+    w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusOK)
     if err := json.NewEncoder(w).Encode(resp); err != nil {
-        // Логируем ошибку, если не удалось отправить JSON
-        return
+        log.Printf("GetGroups encode error: %v", err)
     }
 }
 
-
 func broadcastToOtherParticipants(chatID string, senderID string, payload []byte) {
-    // 1. Получаем список участников из БД
+    // Пробуем получить участников из chats (для личных чатов)
     participants, err := repo.GetChatParticipants(chatID)
     if err != nil {
-        return
+        // Если не нашли в chats — пробуем groups
+        participants, err = repo.GetGroupParticipants(chatID)
+        if err != nil {
+            log.Printf("broadcastToOtherParticipants error: %v", err)
+            return
+        }
     }
+
     for _, pID := range participants {
-        if pID == senderID{
+        if pID == senderID {
             continue
         }
         userConnsMu.Lock()
