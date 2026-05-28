@@ -2,6 +2,7 @@ package protocol_stack
 
 import (
 	"backend/internal"
+	"backend/internal/cache"
 	"backend/internal/database"
 	"backend/internal/protocol_stack/handlers"
 	"backend/internal/udp"
@@ -26,6 +27,8 @@ var authService *database.AuthService
 var repo *database.Repository
 
 func Start() error {
+	cache.Init(os.Getenv("REDIS_HOST"), os.Getenv("REDIS_PORT"), os.Getenv("REDIS_PASSWORD"))
+
 	db, err := database.InitDB()
 	if err != nil {
 		return fmt.Errorf("failed to init db: %v", err)

@@ -1,16 +1,23 @@
 package protocol_stack
 
 import (
+	"backend/internal/cache"
+	"context"
+	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"strings"
-	"encoding/json"
-	"net"
 	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
-    "context"
-    "github.com/golang-jwt/jwt/v5"
-    "errors"
 )
+
+
+// tokenCache: token → userID. TTL = min(JWT expiry, 5 min).
+var tokenCache = cache.New[string]("token")
 
 func parseToken(tokenString string) (*Claims, error) {
     token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
@@ -87,32 +94,47 @@ func enableCORS(next http.Handler) http.Handler {
 type contextKey string
 const UserIDKey contextKey = "userIDKey"
 
-// Проверка JWT токена
+// Проверка JWT токена с кэшированием результата
 func JWTMiddleware(next http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        tokenString := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-        tokenString = strings.TrimSpace(tokenString)
-        if tokenString == "" {
-            tokenString = r.URL.Query().Get("token")
-        }
-        if tokenString == "" {
-            w.WriteHeader(http.StatusUnauthorized)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Missing auth token"})
-            return
-        }
+	return func(w http.ResponseWriter, r *http.Request) {
+		tokenString := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		tokenString = strings.TrimSpace(tokenString)
+		if tokenString == "" {
+			tokenString = r.URL.Query().Get("token")
+		}
+		if tokenString == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Missing auth token"})
+			return
+		}
 
-        claims, err := parseToken(tokenString) 
-        if err != nil {
-            w.WriteHeader(http.StatusUnauthorized)
-            json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired token"})
-            return
-        }
+		// Быстрый путь: кэш-хит — не парсим JWT заново
+		if userID, ok := tokenCache.Get(tokenString); ok {
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			next(w, r.WithContext(ctx))
+			return
+		}
 
-        ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
-        
-        // 3. Передаем запрос дальше с новым контекстом
-        next(w, r.WithContext(ctx))
-    }
+		// Медленный путь: парсим JWT
+		claims, err := parseToken(tokenString)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid or expired token"})
+			return
+		}
+
+		// TTL кэша = min(оставшееся время жизни токена, 5 минут)
+		ttl := time.Until(claims.ExpiresAt.Time)
+		if ttl > 5*time.Minute {
+			ttl = 5 * time.Minute
+		}
+		if ttl > 0 {
+			tokenCache.Set(tokenString, claims.UserID, ttl)
+		}
+
+		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+		next(w, r.WithContext(ctx))
+	}
 }
 
 

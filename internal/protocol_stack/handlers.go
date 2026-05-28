@@ -164,6 +164,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
+        now := time.Now()
         broadcastData := map[string]interface{}{
             "type":       TypeNewMessage,
             "id":         id,
@@ -171,7 +172,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
             "sender_id":  userID,
             "text":       text,
             "username":   senderName,
-            "updated_at": time.Now().Unix(),
+            "updated_at": now.Unix(),
+            "created_at": now.Format(time.RFC3339),
         }
 
         log.Printf("Broadcasting message: chatID=%s, text=%s", chatID, text) // ← ДОБАВЬ

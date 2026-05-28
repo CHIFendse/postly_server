@@ -1,11 +1,18 @@
 package database
 
 import (
+	"backend/internal/cache"
 	"database/sql"
-	"time"
 	"fmt"
-    "log"
-    "errors"
+	"log"
+	"time"
+)
+
+var (
+	// msgCache: chatID → список сообщений. TTL 60 сек, инвалидируется при AddMessage.
+	msgCache = cache.New[[]*Messages]("msg")
+	// userCache: userID → username. TTL 10 мин.
+	userCache = cache.New[string]("user")
 )
 
 type Repository struct {
@@ -79,28 +86,39 @@ func (c *Repository) GetGroups(id string) ([]*Groups, error) {
 }
 
 func (c *Repository) GetMessages(chat_id string) ([]*Messages, error) {
-	query := `SELECT id, text, conversation_id, sender_id, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC`
+	// Кэш-хит: не идём в БД
+	if cached, ok := msgCache.Get(chat_id); ok {
+		return cached, nil
+	}
+
+	// JOIN с users — один запрос вместо N+1
+	query := `
+		SELECT m.id, m.text, m.conversation_id, m.sender_id, m.created_at,
+		       COALESCE(u.username, '')
+		FROM messages m
+		LEFT JOIN users u ON u.id = m.sender_id
+		WHERE m.conversation_id = $1
+		ORDER BY m.created_at ASC`
+
 	rows, err := c.db.Query(query, chat_id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	messages := make([]*Messages, 0)
 	for rows.Next() {
 		m := new(Messages)
-		err := rows.Scan(&m.Id, &m.Text, &m.Chat_id, &m.Sender_id, &m.Created_at)
-		if err != nil {
+		if err := rows.Scan(&m.Id, &m.Text, &m.Chat_id, &m.Sender_id, &m.Created_at, &m.Username); err != nil {
 			return nil, err
 		}
-        m.Username, err = c.GetUserFromID(m.Sender_id)
-        if err != nil {
-            return nil, errors.New("Ошибка поиска юзера по айди")
-        }
 		messages = append(messages, m)
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+
+	msgCache.Set(chat_id, messages, 60*time.Second)
 	return messages, nil
 }
 
@@ -182,10 +200,12 @@ func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error)
         }
     }
 
-    err = tx.Commit()
-    if err != nil {
+    if err = tx.Commit(); err != nil {
         return "", err
     }
+
+    // Инвалидируем кэш сообщений для этого чата
+    msgCache.Delete(chat_id)
 
     return newID, nil
 }
@@ -284,15 +304,15 @@ func (r *Repository) GetChatParticipants(chatID string) ([]string, error) {
 }
 
 func (c *Repository) GetUserFromID(id string) (string, error) {
-    var username string
-    query := "SELECT username FROM users WHERE id = $1"
-    fmt.Println("Айди:", id)
-    err := c.db.QueryRow(query, id).Scan(&username)
-    if err != nil {
-        fmt.Println(err)
-        return "", err
-    }
-    return username, nil
+	if username, ok := userCache.Get(id); ok {
+		return username, nil
+	}
+	var username string
+	if err := c.db.QueryRow("SELECT username FROM users WHERE id = $1", id).Scan(&username); err != nil {
+		return "", err
+	}
+	userCache.Set(id, username, 10*time.Minute)
+	return username, nil
 }
 
 func (r *Repository) GetGroupParticipants(groupID string) ([]string, error) {
