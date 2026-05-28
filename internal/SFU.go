@@ -4,14 +4,13 @@ import (
 	"net"
 )
 
-
-func SFU(data []byte, targets []*net.UDPAddr, sender *net.UDPAddr, conn *net.UDPConn) error {
-    for _, target := range targets {
-        // Мы должны отправлять пакет ВСЕМ, КРОМЕ того, кто его прислал
-        if target.Port == sender.Port && target.IP.Equal(sender.IP) {
-            continue 
-        }
-        conn.WriteToUDP(data, target)
-    }
+func SFU(data []byte, targets []net.Conn, sender net.Conn) error {
+	senderAddr := sender.RemoteAddr().String()
+	for _, target := range targets {
+		if target.RemoteAddr().String() == senderAddr {
+			continue
+		}
+		target.Write(data)
+	}
 	return nil
 }

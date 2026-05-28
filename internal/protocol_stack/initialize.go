@@ -1,191 +1,179 @@
-	package protocol_stack
+package protocol_stack
 
-	import (
-		"backend/internal"
-		"backend/internal/protocol_stack/handlers"
-		"backend/internal/database"
-		"backend/internal/udp"
-		"encoding/binary"
-		"fmt"
-		"log"
-		"net"
-		"net/http"
-		"strings"
-		"sync"
-		"time"
-	)
+import (
+	"backend/internal"
+	"backend/internal/database"
+	"backend/internal/protocol_stack/handlers"
+	"backend/internal/udp"
+	"crypto/tls"
+	"encoding/binary"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 
-	type Response struct {
-		Status bool `json:"status"`
+	dtls "github.com/pion/dtls/v2"
+)
+
+type Response struct {
+	Status bool `json:"status"`
+}
+
+var authService *database.AuthService
+var repo *database.Repository
+
+func Start() error {
+	db, err := database.InitDB()
+	if err != nil {
+		return fmt.Errorf("failed to init db: %v", err)
+	}
+	authService = database.NewAuthService(db)
+	repo = database.NewRepository(db)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleHTTP)
+	mux.HandleFunc("/register", handleRegister)
+	mux.HandleFunc("/login", handleLogin)
+	mux.HandleFunc("/getVersion", handlers.HandleVersion)
+	mux.HandleFunc("/verify", JWTMiddleware(handleVerify))
+	mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
+	mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
+	mux.HandleFunc("/getGroups", JWTMiddleware(handleGetGroups))
+	mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
+	mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
+	mux.HandleFunc("/createGroup", JWTMiddleware(handleCreateGroup))
+	mux.HandleFunc("/ws", JWTMiddleware(handleWS))
+
+	server := &http.Server{
+		Addr:    "0.0.0.0:8081",
+		Handler: limitMiddleware(NewIPRateLimiter(5, 10), enableCORS(mux)),
 	}
 
-	type UserAddr struct {
-		Addr     *net.UDPAddr
-		LastSeen time.Time
+	certFile := os.Getenv("TLS_CERT")
+	keyFile := os.Getenv("TLS_KEY")
+
+	tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load TLS cert: %w", err)
 	}
 
-	type IpAddresses struct {
-		mu     sync.Mutex
-		IpList map[string]*UserAddr
+	// tcp4 to keep IPv4-only binding
+	listener, err := tls.Listen("tcp4", "0.0.0.0:8081", &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+	})
+	if err != nil {
+		return err
 	}
+	log.Println("[HTTPS] server started on :8081")
+	return server.Serve(listener)
+}
 
-	var authService *database.AuthService
-	var repo *database.Repository
+func StartUDP() error {
+	rooms := udp.NewRoomManager()
 
-	func (s *IpAddresses) AddIP(addr *net.UDPAddr) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.IpList[addr.String()] = &UserAddr{
-			Addr:     addr,
-			LastSeen: time.Now(),
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		for range ticker.C {
+			rooms.Cleanup()
 		}
+	}()
+
+	certFile := os.Getenv("TLS_CERT")
+	keyFile := os.Getenv("TLS_KEY")
+
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load DTLS cert: %w", err)
 	}
 
-	func (s *IpAddresses) DelIP(ip string) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		delete(s.IpList, ip)
+	dtlsConfig := &dtls.Config{
+		Certificates: []tls.Certificate{certificate},
+		ClientAuth:   dtls.NoClientCert,
 	}
 
-	func (s *IpAddresses) UpdateLastSeen(ip string) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if user, exists := s.IpList[ip]; exists {
-			user.LastSeen = time.Now()
-		}
+	addr := &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 8082}
+	listener, err := dtls.Listen("udp4", addr, dtlsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to listen DTLS: %w", err)
 	}
+	defer listener.Close()
 
-	func (s *IpAddresses) IsAuthorized(ip string) bool {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		_, exists := s.IpList[ip]
-		return exists
-	}
+	log.Println("[DTLS] server started on :8082")
 
-	func (s *IpAddresses) GetList() []*net.UDPAddr {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		list := make([]*net.UDPAddr, 0, len(s.IpList))
-		for _, user := range s.IpList {
-			list = append(list, user.Addr)
-		}
-		return list
-	}
-
-	func Start() error {
-		db, err := database.InitDB()
+	for {
+		conn, err := listener.Accept()
 		if err != nil {
-			return fmt.Errorf("failed to init db: %v", err)
+			log.Printf("[DTLS] accept error: %v", err)
+			continue
 		}
-		authService = database.NewAuthService(db)
-		repo = database.NewRepository(db)
-
-		mux := http.NewServeMux()
-		mux.HandleFunc("/", handleHTTP)
-		mux.HandleFunc("/register", handleRegister)
-		mux.HandleFunc("/login", handleLogin)
-		mux.HandleFunc("/getVersion", handlers.HandleVersion)
-		mux.HandleFunc("/verify", JWTMiddleware(handleVerify))
-		mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
-		mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
-		mux.HandleFunc("/getGroups", JWTMiddleware(handleGetGroups))
-		mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
-		mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
-		mux.HandleFunc("/createGroup", JWTMiddleware(handleCreateGroup))
-		mux.HandleFunc("/ws", JWTMiddleware(handleWS))
-
-		server := &http.Server{
-			Addr:    "0.0.0.0:8081",
-			Handler: limitMiddleware(NewIPRateLimiter(5, 10), enableCORS(mux)),
-		}
-
-		// Создаем слушателя явно для протокола tcp4
-		listener, err := net.Listen("tcp4", server.Addr)
-		if err != nil {
-			return err
-		}
-		return server.Serve(listener)
+		go handleDTLSConn(conn, rooms)
 	}
+}
 
-	func StartUDP() error {
-		rooms := udp.NewRoomManager()
+func handleDTLSConn(conn net.Conn, rooms *udp.RoomManager) {
+	defer conn.Close()
+	ipStr := conn.RemoteAddr().String()
+	buf := make([]byte, 2048)
 
-		go func() {
-			ticker := time.NewTicker(30 * time.Second)
-			for range ticker.C {
-				rooms.Cleanup()
-			}
-		}()
-
-		addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:8082")
-		ln, err := net.ListenUDP("udp", addr)
+	for {
+		n, err := conn.Read(buf)
 		if err != nil {
-			return fmt.Errorf("failed to listed UDP: %w", err)
+			rooms.RemoveUserByAddr(ipStr)
+			return
 		}
-		defer ln.Close()
-		ln.SetReadBuffer(4194304)
-		ln.SetWriteBuffer(4194304)
-		buf := make([]byte, 2048)
+		if n < 3 {
+			continue
+		}
 
-		for {
-			n, remoteAddr, err := ln.ReadFromUDP(buf)
-			if err != nil {
-				continue
-			}
-			if n < 3 {
-				continue
-			}
-			ipStr := remoteAddr.String()
-			if buf[0] == 'H' || buf[0] == 'B' {
-				message := string(buf[:n])
-				if strings.HasPrefix(message, "HELLO ") {
-					parts := strings.Split(message, " ")
-					if len(parts) < 3 {
-						continue
-					}
+		ip, _, _ := net.SplitHostPort(ipStr)
+		if !getUDPLimiter(ip).Allow() {
+			continue
+		}
 
-					token, roomID := parts[1], parts[2]
-					uid, err := authService.GetUserIDFromToken(token)
-					if err != nil {
-						log.Printf("[UDP] token error %s: %v", ipStr, err)
-						continue
-					}
-
-					// РЕГИСТРАЦИЯ: без этого GetParticipants всегда будет возвращать false
-					isNew := rooms.AddUser(roomID, uid, remoteAddr, ln)
-					if isNew {
-						log.Printf("[UDP] user %s entered the room %s (%s)", uid, roomID, ipStr)
-					}
+		if buf[0] == 'H' || buf[0] == 'B' {
+			message := string(buf[:n])
+			if strings.HasPrefix(message, "HELLO ") {
+				parts := strings.Split(message, " ")
+				if len(parts) < 3 {
 					continue
 				}
-
-				// Б. ОБРАБОТКА ВЫХОДА (BYE)
-				if strings.HasPrefix(message, "BYE") {
-					rooms.RemoveUserByAddr(ipStr)
+				token, roomID := parts[1], parts[2]
+				uid, err := authService.GetUserIDFromToken(token)
+				if err != nil {
+					log.Printf("[DTLS] token error %s: %v", ipStr, err)
 					continue
 				}
-			}
-			// В. ОБРАБОТКА АУДИО
-			// Теперь GetParticipants найдет участников, так как мы их добавили выше в HELLO
-			if participants, ok := rooms.GetParticipants(ipStr); ok {
-				rooms.UpdateActivity(ipStr)
-
-				if n >= 4 {
-					// Извлекаем Sequence Number для анализа потерь
-					seq := binary.BigEndian.Uint32(buf[:4])
-					action := rooms.AnalyzePacketLoss(ipStr, seq)
-
-					if action == "DOWN" {
-						ln.WriteToUDP([]byte("QUALITY_DOWN"), remoteAddr)
-					} else if action == "UP" {
-						ln.WriteToUDP([]byte("QUALITY_UP"), remoteAddr)
-					}
+				isNew := rooms.AddUser(roomID, uid, conn)
+				if isNew {
+					log.Printf("[DTLS] user %s entered room %s (%s)", uid, roomID, ipStr)
 				}
-
-				// Рассылаем остальным
-				internal.SFU(buf[:n], participants, remoteAddr, ln)
-			} else {
-				log.Printf("[UDP] packet from anonimous address: %s", ipStr)
+				continue
+			}
+			if strings.HasPrefix(message, "BYE") {
+				rooms.RemoveUserByAddr(ipStr)
+				return
 			}
 		}
+
+		if participants, ok := rooms.GetParticipants(ipStr); ok {
+			rooms.UpdateActivity(ipStr)
+
+			if n >= 4 {
+				seq := binary.BigEndian.Uint32(buf[:4])
+				action := rooms.AnalyzePacketLoss(ipStr, seq)
+				if action == "DOWN" {
+					conn.Write([]byte("QUALITY_DOWN"))
+				} else if action == "UP" {
+					conn.Write([]byte("QUALITY_UP"))
+				}
+			}
+
+			internal.SFU(buf[:n], participants, conn)
+		} else {
+			log.Printf("[DTLS] packet from anonymous: %s", ipStr)
+		}
 	}
+}
