@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	TypeNewMessage = "NEW_MESSAGE"
-	TypeCallInvite = "CALL_INVITE"
-	TypeCallAccept = "CALL_ACCEPT"
-	TypeCallReject = "CALL_REJECT"
-	TypeCallHangup = "CALL_HANGUP"
-	TypeTyping     = "TYPING"
+	TypeNewMessage    = "NEW_MESSAGE"
+	TypeCallInvite    = "CALL_INVITE"
+	TypeCallAccept    = "CALL_ACCEPT"
+	TypeCallReject    = "CALL_REJECT"
+	TypeCallHangup    = "CALL_HANGUP"
+	TypeTyping        = "TYPING"
+	TypeFriendRequest = "FRIEND_REQUEST"
 )
 
 // typingCache: "chatId:userId" → username. TTL 4s — автоматически истекает когда перестали печатать.
@@ -600,6 +601,185 @@ func broadcastToOtherParticipants(chatID string, senderID string, payload []byte
         }
         userConnsMu.Unlock()
     }
+}
+
+// ── FRIENDS ─────────────────────────────────────────────────────────────────
+
+func handleSendFriendRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	senderID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		UserID         string `json:"user_id"`
+		TargetUsername string `json:"target_username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if data.TargetUsername == "" {
+		http.Error(w, "target_username required", http.StatusBadRequest)
+		return
+	}
+	// Используем userID из токена (не из тела запроса — защита от подмены)
+	if senderID == "" {
+		senderID = data.UserID
+	}
+
+	reqID, receiverID, err := repo.SendFriendRequest(senderID, data.TargetUsername)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	// Уведомляем получателя через WS если он онлайн
+	senderUsername, _ := repo.GetUserFromID(senderID)
+	notification, _ := json.Marshal(map[string]interface{}{
+		"type":          TypeFriendRequest,
+		"id":            reqID,
+		"request_id":    reqID,
+		"sender_id":     senderID,
+		"username":      senderUsername,
+		"from_username": senderUsername,
+	})
+	userConnsMu.Lock()
+	if rc, ok := userConns[receiverID]; ok {
+		rc.WriteMessage(websocket.TextMessage, notification) //nolint
+	}
+	userConnsMu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"request_id": reqID})
+}
+
+func handleGetFriendRequests(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if userID == "" {
+		userID = data.UserID
+	}
+
+	requests, err := repo.GetFriendRequests(userID)
+	if err != nil {
+		log.Printf("GetFriendRequests error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(requests)
+}
+
+func handleAcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		UserID    string `json:"user_id"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if userID == "" {
+		userID = data.UserID
+	}
+
+	if err := repo.AcceptFriendRequest(userID, data.RequestID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func handleDeclineFriendRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		UserID    string `json:"user_id"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if userID == "" {
+		userID = data.UserID
+	}
+
+	if err := repo.DeclineFriendRequest(userID, data.RequestID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func handleGetFriends(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if userID == "" {
+		userID = data.UserID
+	}
+
+	friends, err := repo.GetFriends(userID)
+	if err != nil {
+		log.Printf("GetFriends error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(friends)
 }
 
 func handleHTTP(w http.ResponseWriter, r *http.Request) {

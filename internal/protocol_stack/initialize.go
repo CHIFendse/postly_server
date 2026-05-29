@@ -36,6 +36,11 @@ func Start() error {
 	authService = database.NewAuthService(db)
 	repo = database.NewRepository(db)
 
+	// Создаём таблицы друзей если их нет (идемпотентная миграция)
+	if err := database.MigrateFriends(db); err != nil {
+		log.Printf("MigrateFriends warning: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleHTTP)
 	mux.HandleFunc("/register", handleRegister)
@@ -49,6 +54,12 @@ func Start() error {
 	mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
 	mux.HandleFunc("/createGroup", JWTMiddleware(handleCreateGroup))
 	mux.HandleFunc("/ws", JWTMiddleware(handleWS))
+	// Friends
+	mux.HandleFunc("/sendFriendRequest",    JWTMiddleware(handleSendFriendRequest))
+	mux.HandleFunc("/getFriendRequests",    JWTMiddleware(handleGetFriendRequests))
+	mux.HandleFunc("/acceptFriendRequest",  JWTMiddleware(handleAcceptFriendRequest))
+	mux.HandleFunc("/declineFriendRequest", JWTMiddleware(handleDeclineFriendRequest))
+	mux.HandleFunc("/getFriends",           JWTMiddleware(handleGetFriends))
 
 	server := &http.Server{
 		Addr:    "0.0.0.0:8081",
