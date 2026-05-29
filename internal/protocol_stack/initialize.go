@@ -54,6 +54,10 @@ func Start() error {
 	mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
 	mux.HandleFunc("/createGroup", JWTMiddleware(handleCreateGroup))
 	mux.HandleFunc("/ws", JWTMiddleware(handleWS))
+	// Message actions
+	mux.HandleFunc("/deleteMessage", JWTMiddleware(handleDeleteMessage))
+	mux.HandleFunc("/clearChat",     JWTMiddleware(handleClearChat))
+	mux.HandleFunc("/deleteChat",    JWTMiddleware(handleDeleteChat))
 	// Friends
 	mux.HandleFunc("/sendFriendRequest",    JWTMiddleware(handleSendFriendRequest))
 	mux.HandleFunc("/getFriendRequests",    JWTMiddleware(handleGetFriendRequests))

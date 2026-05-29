@@ -603,6 +603,132 @@ func broadcastToOtherParticipants(chatID string, senderID string, payload []byte
     }
 }
 
+// ── MESSAGE ACTIONS ──────────────────────────────────────────────────────────
+
+func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	senderID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		MessageID string `json:"message_id"`
+		UserID    string `json:"user_id"`
+		ChatID    string `json:"chat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if senderID == "" {
+		senderID = data.UserID
+	}
+
+	chatID, err := repo.DeleteMessage(data.MessageID, senderID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	// Broadcast удаления всем участникам
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type":       "DELETE_MESSAGE",
+		"message_id": data.MessageID,
+		"chat_id":    chatID,
+	})
+	broadcast(chatID, payload)
+	broadcastToOtherParticipants(chatID, senderID, payload, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func handleClearChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		ChatID string `json:"chat_id"`
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if userID == "" {
+		userID = data.UserID
+	}
+
+	if err := repo.ClearChat(data.ChatID, userID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type":    "CLEAR_CHAT",
+		"chat_id": data.ChatID,
+	})
+	broadcast(data.ChatID, payload)
+	broadcastToOtherParticipants(data.ChatID, userID, payload, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func handleDeleteChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID, _ := r.Context().Value(UserIDKey).(string)
+
+	var data struct {
+		ChatID string `json:"chat_id"`
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if userID == "" {
+		userID = data.UserID
+	}
+
+	// Уведомляем участников до удаления
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type":    "DELETE_CHAT",
+		"chat_id": data.ChatID,
+	})
+	broadcast(data.ChatID, payload)
+	broadcastToOtherParticipants(data.ChatID, userID, payload, true)
+
+	// Удаляем room из памяти
+	roomsMu.Lock()
+	delete(rooms, data.ChatID)
+	roomsMu.Unlock()
+
+	if err := repo.DeleteChat(data.ChatID, userID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
 // ── FRIENDS ─────────────────────────────────────────────────────────────────
 
 func handleSendFriendRequest(w http.ResponseWriter, r *http.Request) {

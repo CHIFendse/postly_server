@@ -322,6 +322,84 @@ func (c *Repository) GetUserFromID(id string) (string, error) {
 	return username, nil
 }
 
+// DeleteMessage удаляет сообщение (только отправитель может удалить своё).
+func (r *Repository) DeleteMessage(messageID, senderID string) (string, error) {
+	var chatID string
+	err := r.db.QueryRow(
+		"DELETE FROM messages WHERE id=$1 AND sender_id=$2 RETURNING conversation_id",
+		messageID, senderID,
+	).Scan(&chatID)
+	if err != nil {
+		return "", fmt.Errorf("сообщение не найдено или нет прав")
+	}
+	msgCache.Delete(chatID)
+	return chatID, nil
+}
+
+// ClearChat удаляет все сообщения в чате.
+func (r *Repository) ClearChat(chatID, userID string) error {
+	// Проверяем что пользователь — участник чата или группы
+	var count int
+	r.db.QueryRow(
+		`SELECT COUNT(*) FROM chats WHERE id=$1 AND (user_id1=$2 OR user_id2=$2)`,
+		chatID, userID,
+	).Scan(&count)
+	if count == 0 {
+		r.db.QueryRow(
+			`SELECT COUNT(*) FROM group_members WHERE group_id=$1 AND user_id=$2`,
+			chatID, userID,
+		).Scan(&count)
+	}
+	if count == 0 {
+		return fmt.Errorf("нет доступа к чату")
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("DELETE FROM messages WHERE conversation_id=$1", chatID); err != nil {
+		return err
+	}
+	tx.Exec("UPDATE chats SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", chatID)
+	tx.Exec("UPDATE groups SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", chatID)
+	msgCache.Delete(chatID)
+	return tx.Commit()
+}
+
+// DeleteChat удаляет чат и все его сообщения.
+func (r *Repository) DeleteChat(chatID, userID string) error {
+	// Личный чат
+	res, err := r.db.Exec(
+		"DELETE FROM chats WHERE id=$1 AND (user_id1=$2 OR user_id2=$2)",
+		chatID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		r.db.Exec("DELETE FROM messages WHERE conversation_id=$1", chatID)
+		r.db.Exec("DELETE FROM conversations WHERE id=$1", chatID)
+		msgCache.Delete(chatID)
+		return nil
+	}
+	// Группа — только admin может удалить
+	res, err = r.db.Exec(
+		"DELETE FROM groups WHERE id=$1 AND admin_id=$2",
+		chatID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("нет прав на удаление чата")
+	}
+	r.db.Exec("DELETE FROM messages WHERE conversation_id=$1", chatID)
+	r.db.Exec("DELETE FROM conversations WHERE id=$1", chatID)
+	msgCache.Delete(chatID)
+	return nil
+}
+
 func (r *Repository) GetGroupParticipants(groupID string) ([]string, error) {
     rows, err := r.db.Query("SELECT user_id FROM group_members WHERE group_id = $1", groupID)
     if err != nil {
