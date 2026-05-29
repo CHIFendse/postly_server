@@ -76,9 +76,9 @@ func (s *AuthService) ValidateToken(tokenString string) (bool, error) {
 
 func (c *Repository) GetId(username string) (string, error) {
     var id string
-    query := "SELECT id FROM users WHERE username = $1"
+    query := "SELECT id FROM users WHERE LOWER(username) = LOWER($1)"
     err := c.db.QueryRow(query, username).Scan(&id)
-    if err != nil{
+    if err != nil {
         return "", err
     }
     return id, nil
