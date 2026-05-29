@@ -54,7 +54,7 @@ func (c *Repository) GetGroups(id string) ([]*Groups, error) {
         SELECT g.id, g.name, g.created_at,
                COALESCE(g.last_message, ''),
                COALESCE(sender.username, ''),
-               EXTRACT(EPOCH FROM (COALESCE(g.updated_at, g.created_at) AT TIME ZONE 'Europe/Moscow' AT TIME ZONE 'UTC'))::INT
+               EXTRACT(EPOCH FROM COALESCE(g.updated_at, g.created_at))::INT
         FROM groups g
         JOIN group_members gm ON g.id = gm.group_id
         LEFT JOIN users sender ON sender.id = g.last_msg_sender
@@ -129,7 +129,7 @@ func (c *Repository) GetChats(id string) ([]*Chats, error) {
             u.username AS chat_name, 
             COALESCE(c.last_message, ''), 
             COALESCE(sender.username, ''),
-            EXTRACT(EPOCH FROM (c.updated_at AT TIME ZONE 'Europe/Moscow' AT TIME ZONE 'UTC'))::INT
+            EXTRACT(EPOCH FROM c.updated_at)::INT
         FROM chats c 
         JOIN users u ON u.id = (
             CASE 
