@@ -13,6 +13,8 @@ var (
 	msgCache = cache.New[[]*Messages]("msg")
 	// userCache: userID → username. TTL 10 мин.
 	userCache = cache.New[string]("user")
+	// participantsCache: chatID/groupID → []userID. TTL 5 мин.
+	participantsCache = cache.New[[]string]("participants")
 )
 
 type Repository struct {
@@ -299,15 +301,16 @@ func (r *Repository) CreateNewGroup(name string, adminID string, isPrivate bool,
 }
 
 func (r *Repository) GetChatParticipants(chatID string) ([]string, error) {
-    var u1, u2 string
-    
-    err := r.db.QueryRow("SELECT user_id1, user_id2 FROM chats WHERE id = $1", chatID).Scan(&u1, &u2)
-    
-    if err != nil {
-        return nil, err
-    }
-    
-    return []string{u1, u2}, nil
+	if cached, ok := participantsCache.Get(chatID); ok {
+		return cached, nil
+	}
+	var u1, u2 string
+	if err := r.db.QueryRow("SELECT user_id1, user_id2 FROM chats WHERE id = $1", chatID).Scan(&u1, &u2); err != nil {
+		return nil, err
+	}
+	result := []string{u1, u2}
+	participantsCache.Set(chatID, result, 5*time.Minute)
+	return result, nil
 }
 
 func (c *Repository) GetUserFromID(id string) (string, error) {
@@ -322,18 +325,39 @@ func (c *Repository) GetUserFromID(id string) (string, error) {
 	return username, nil
 }
 
-// DeleteMessage удаляет сообщение (только отправитель может удалить своё).
-func (r *Repository) DeleteMessage(messageID, senderID string) (string, error) {
-	var chatID string
-	err := r.db.QueryRow(
+// DeleteMessage удаляет сообщение и обновляет last_message в чате/группе.
+// Возвращает chatID, новый last_message текст и sender username.
+func (r *Repository) DeleteMessage(messageID, senderID string) (chatID, newLastMsg, newLastUsername string, err error) {
+	err = r.db.QueryRow(
 		"DELETE FROM messages WHERE id=$1 AND sender_id=$2 RETURNING conversation_id",
 		messageID, senderID,
 	).Scan(&chatID)
 	if err != nil {
-		return "", fmt.Errorf("сообщение не найдено или нет прав")
+		return "", "", "", fmt.Errorf("сообщение не найдено или нет прав")
 	}
+
+	// Находим новое последнее сообщение
+	var newLastSenderID string
+	dbErr := r.db.QueryRow(
+		`SELECT COALESCE(m.text,''), COALESCE(m.sender_id::text,'')
+		 FROM messages m WHERE m.conversation_id=$1
+		 ORDER BY m.created_at DESC LIMIT 1`,
+		chatID,
+	).Scan(&newLastMsg, &newLastSenderID)
+
+	if dbErr != nil || newLastMsg == "" {
+		// Сообщений нет
+		r.db.Exec("UPDATE chats  SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", chatID)
+		r.db.Exec("UPDATE groups SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", chatID)
+		newLastMsg = ""
+	} else {
+		r.db.Exec("UPDATE chats  SET last_message=$1, last_msg_sender=$2::uuid WHERE id=$3", newLastMsg, newLastSenderID, chatID)
+		r.db.Exec("UPDATE groups SET last_message=$1, last_msg_sender=$2::uuid WHERE id=$3", newLastMsg, newLastSenderID, chatID)
+		newLastUsername, _ = r.GetUserFromID(newLastSenderID)
+	}
+
 	msgCache.Delete(chatID)
-	return chatID, nil
+	return chatID, newLastMsg, newLastUsername, nil
 }
 
 // ClearChat удаляет все сообщения в чате.
@@ -401,24 +425,25 @@ func (r *Repository) DeleteChat(chatID, userID string) error {
 }
 
 func (r *Repository) GetGroupParticipants(groupID string) ([]string, error) {
-    rows, err := r.db.Query("SELECT user_id FROM group_members WHERE group_id = $1", groupID)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
-
-    var participants []string
-    for rows.Next() {
-        var userID string
-        if err := rows.Scan(&userID); err != nil {
-            return nil, err
-        }
-        participants = append(participants, userID)
-    }
-    
-    if len(participants) == 0 {
-        return nil, fmt.Errorf("no participants for group %s", groupID)
-    }
-    
-    return participants, nil
+	if cached, ok := participantsCache.Get(groupID); ok {
+		return cached, nil
+	}
+	rows, err := r.db.Query("SELECT user_id FROM group_members WHERE group_id = $1", groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var participants []string
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		participants = append(participants, userID)
+	}
+	if len(participants) == 0 {
+		return nil, fmt.Errorf("no participants for group %s", groupID)
+	}
+	participantsCache.Set(groupID, participants, 5*time.Minute)
+	return participants, nil
 }

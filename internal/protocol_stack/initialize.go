@@ -67,7 +67,7 @@ func Start() error {
 
 	server := &http.Server{
 		Addr:    "0.0.0.0:8081",
-		Handler: limitMiddleware(NewIPRateLimiter(5, 10), enableCORS(mux)),
+		Handler: limitMiddleware(NewIPRateLimiter(100, 300), enableCORS(mux)),
 	}
 
 	certFile := os.Getenv("TLS_CERT")

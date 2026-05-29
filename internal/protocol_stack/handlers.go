@@ -625,7 +625,7 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		senderID = data.UserID
 	}
 
-	chatID, err := repo.DeleteMessage(data.MessageID, senderID)
+	chatID, newLastMsg, newLastUsername, err := repo.DeleteMessage(data.MessageID, senderID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -633,11 +633,13 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Broadcast удаления всем участникам
+	// Broadcast удаления всем участникам (включая обновлённый last_message)
 	payload, _ := json.Marshal(map[string]interface{}{
-		"type":       "DELETE_MESSAGE",
-		"message_id": data.MessageID,
-		"chat_id":    chatID,
+		"type":         "DELETE_MESSAGE",
+		"message_id":   data.MessageID,
+		"chat_id":      chatID,
+		"last_message": newLastMsg,
+		"username":     newLastUsername,
 	})
 	broadcast(chatID, payload)
 	broadcastToOtherParticipants(chatID, senderID, payload, true)
