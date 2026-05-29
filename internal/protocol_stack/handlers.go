@@ -171,16 +171,17 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
                     "sender_id": userID,
                     "username":  senderName,
                 })
-                broadcastToOtherParticipants(chatID, userID, payload)
+                // skipIfInRoom=false: broadcast() не вызывается перед этим,
+                // поэтому надо слать всем участникам, включая тех кто в rooms.
+                broadcastToOtherParticipants(chatID, userID, payload, false)
             }
             continue
         }
 
         // --- ЛОГИКА ЗВОНКОВ (Signaling) ---
         if msgType == TypeCallInvite || msgType == TypeCallAccept || msgType == TypeCallReject || msgType == TypeCallHangup {
-            // Сигналы звонка МЫ НЕ СОХРАНЯЕМ В БД. Просто пересылаем.
             log.Printf("Call Signal: %s from %s in chat %s", msgType, userID, chatID)
-            broadcastToOtherParticipants(chatID, userID, p)
+            broadcastToOtherParticipants(chatID, userID, p, false)
             continue
         }
 
@@ -212,9 +213,10 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         finalPayload, _ := json.Marshal(broadcastData)
 
         // broadcast — всем в rooms (включая отправителя).
-        // broadcastToOtherParticipants — участникам, не попавшим в rooms (fallback).
+        // broadcastToOtherParticipants(skipIfInRoom=true) — fallback только для тех,
+        // кто не в rooms, чтобы не слать дубль.
         broadcast(chatID, finalPayload)
-        broadcastToOtherParticipants(chatID, userID, finalPayload)
+        broadcastToOtherParticipants(chatID, userID, finalPayload, true)
 
         // Эхо отправителю если он не в rooms (GetGroups/GetChats упал при подключении).
         // Без эха chatsMenu не обновит last_message в реальном времени.
@@ -564,7 +566,7 @@ func handleGetGroups(w http.ResponseWriter, r *http.Request) {
     }
 }
 
-func broadcastToOtherParticipants(chatID string, senderID string, payload []byte) {
+func broadcastToOtherParticipants(chatID string, senderID string, payload []byte, skipIfInRoom bool) {
     participants, err := repo.GetChatParticipants(chatID)
     if err != nil {
         participants, err = repo.GetGroupParticipants(chatID)
@@ -583,7 +585,10 @@ func broadcastToOtherParticipants(chatID string, senderID string, payload []byte
     roomsMu.Unlock()
 
     for _, pID := range participants {
-        if pID == senderID || inRoom[pID] {
+        if pID == senderID {
+            continue
+        }
+        if skipIfInRoom && inRoom[pID] {
             continue
         }
         userConnsMu.Lock()
