@@ -188,15 +188,22 @@ func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error)
     }
 
     rowsAffected, _ := result.RowsAffected()
-    
+
     if rowsAffected == 0 {
-        _, err = tx.Exec(`
-            UPDATE groups 
-            SET last_message = $1, last_msg_sender = $2, updated_at = NOW()
-            WHERE id = $3`,
-            text, sender_id, chat_id)
-        if err != nil {
-            fmt.Println("Ошибка обновления groups:", err)
+        // SAVEPOINT изолирует UPDATE groups: если он упадёт (тип/ограничение),
+        // транзакция не уходит в aborted-state и INSERT сообщения не откатывается.
+        if _, spErr := tx.Exec("SAVEPOINT sp_grp"); spErr == nil {
+            _, grpErr := tx.Exec(`
+                UPDATE groups
+                SET last_message = $1, last_msg_sender = $2, updated_at = NOW()
+                WHERE id = $3`,
+                text, sender_id, chat_id)
+            if grpErr != nil {
+                log.Printf("groups.last_message не обновлён: %v", grpErr)
+                tx.Exec("ROLLBACK TO SAVEPOINT sp_grp")
+            } else {
+                tx.Exec("RELEASE SAVEPOINT sp_grp")
+            }
         }
     }
 

@@ -133,6 +133,14 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
                 }
             }
         }
+        for _, group := range userGroups {
+            if clients, ok := rooms[group.Id]; ok {
+                delete(clients, userID)
+                if len(clients) == 0 {
+                    delete(rooms, group.Id)
+                }
+            }
+        }
         roomsMu.Unlock()
         conn.Close()
         log.Printf("WS: User %s disconnected", userID)
@@ -203,11 +211,23 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
         finalPayload, _ := json.Marshal(broadcastData)
 
-        // broadcast отправляет всем в комнате (отправитель + получатель).
-        // broadcastToOtherParticipants ниже нужен только тем, кто не попал в rooms
-        // (подключился до создания чата). Двойной вызов обоих давал дубли получателю.
+        // broadcast — всем в rooms (включая отправителя).
+        // broadcastToOtherParticipants — участникам, не попавшим в rooms (fallback).
         broadcast(chatID, finalPayload)
         broadcastToOtherParticipants(chatID, userID, finalPayload)
+
+        // Эхо отправителю если он не в rooms (GetGroups/GetChats упал при подключении).
+        // Без эха chatsMenu не обновит last_message в реальном времени.
+        roomsMu.Lock()
+        _, senderInRoom := rooms[chatID][userID]
+        roomsMu.Unlock()
+        if !senderInRoom {
+            userConnsMu.Lock()
+            if sConn, ok := userConns[userID]; ok {
+                sConn.WriteMessage(websocket.TextMessage, finalPayload) //nolint
+            }
+            userConnsMu.Unlock()
+        }
     }
 }
 
