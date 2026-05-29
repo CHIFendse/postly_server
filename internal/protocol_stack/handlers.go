@@ -1,24 +1,31 @@
 package protocol_stack
 
 import (
+	"backend/internal/cache"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
-    "github.com/gorilla/websocket"
-    "sync"
-    "os"
-    "time"
-    "github.com/golang-jwt/jwt/v5"
+	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/websocket"
 )
+
 const (
-    TypeNewMessage = "NEW_MESSAGE"
-    TypeCallInvite = "CALL_INVITE"
-    TypeCallAccept = "CALL_ACCEPT"
-    TypeCallReject = "CALL_REJECT"
-    TypeCallHangup = "CALL_HANGUP"
+	TypeNewMessage = "NEW_MESSAGE"
+	TypeCallInvite = "CALL_INVITE"
+	TypeCallAccept = "CALL_ACCEPT"
+	TypeCallReject = "CALL_REJECT"
+	TypeCallHangup = "CALL_HANGUP"
+	TypeTyping     = "TYPING"
 )
+
+// typingCache: "chatId:userId" → username. TTL 4s — автоматически истекает когда перестали печатать.
+var typingCache = cache.New[string]("typing")
 //-----------------------------------------------------РАБОТА С WEBSOCKET----------------------------------------------------
 var upgrader = websocket.Upgrader{
     CheckOrigin: func(r *http.Request) bool {
@@ -145,6 +152,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
         }
         msgType, _ := raw["type"].(string)
         chatID, _ := raw["chat_id"].(string)
+        // --- СТАТУС ПЕЧАТАНИЯ ---
+        if msgType == TypeTyping {
+            senderName, _ := raw["username"].(string)
+            if chatID != "" && senderName != "" {
+                typingCache.Set(chatID+":"+userID, senderName, 4*time.Second)
+                payload, _ := json.Marshal(map[string]interface{}{
+                    "type":      TypeTyping,
+                    "chat_id":   chatID,
+                    "sender_id": userID,
+                    "username":  senderName,
+                })
+                broadcastToOtherParticipants(chatID, userID, payload)
+            }
+            continue
+        }
+
         // --- ЛОГИКА ЗВОНКОВ (Signaling) ---
         if msgType == TypeCallInvite || msgType == TypeCallAccept || msgType == TypeCallReject || msgType == TypeCallHangup {
             // Сигналы звонка МЫ НЕ СОХРАНЯЕМ В БД. Просто пересылаем.
@@ -176,13 +199,14 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
             "created_at": now.Format(time.RFC3339),
         }
 
-        log.Printf("Broadcasting message: chatID=%s, text=%s", chatID, text) // ← ДОБАВЬ
+        log.Printf("Broadcasting message: chatID=%s, text=%s", chatID, text)
 
         finalPayload, _ := json.Marshal(broadcastData)
 
-        // Сначала отправляем всем в комнате
+        // broadcast отправляет всем в комнате (отправитель + получатель).
+        // broadcastToOtherParticipants ниже нужен только тем, кто не попал в rooms
+        // (подключился до создания чата). Двойной вызов обоих давал дубли получателю.
         broadcast(chatID, finalPayload)
-        // Потом пробуем отправить конкретным участникам
         broadcastToOtherParticipants(chatID, userID, finalPayload)
     }
 }
@@ -521,10 +545,8 @@ func handleGetGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func broadcastToOtherParticipants(chatID string, senderID string, payload []byte) {
-    // Пробуем получить участников из chats (для личных чатов)
     participants, err := repo.GetChatParticipants(chatID)
     if err != nil {
-        // Если не нашли в chats — пробуем groups
         participants, err = repo.GetGroupParticipants(chatID)
         if err != nil {
             log.Printf("broadcastToOtherParticipants error: %v", err)
@@ -532,8 +554,16 @@ func broadcastToOtherParticipants(chatID string, senderID string, payload []byte
         }
     }
 
+    // Снимаем снимок rooms, чтобы не слать дубль тем, кто уже получил через broadcast().
+    roomsMu.Lock()
+    inRoom := make(map[string]bool, len(rooms[chatID]))
+    for id := range rooms[chatID] {
+        inRoom[id] = true
+    }
+    roomsMu.Unlock()
+
     for _, pID := range participants {
-        if pID == senderID {
+        if pID == senderID || inRoom[pID] {
             continue
         }
         userConnsMu.Lock()
