@@ -324,7 +324,18 @@ func (c *Chat) UpdateLastMessage(ctx context.Context, req *chatpb.UpdateLastMess
 		`UPDATE groups SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
 		req.Text, req.SenderId, req.ChatId,
 	)
-	c.cache.Del(ctx, chatsKeyPrefix+req.SenderId, groupsKeyPrefix+req.SenderId)
+	// Инвалидируем кеш для ВСЕХ участников, а не только отправителя
+	pts, err := c.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: req.ChatId})
+	if err == nil && len(pts.UserIds) > 0 {
+		keys := make([]string, 0, len(pts.UserIds)*2)
+		for _, uid := range pts.UserIds {
+			keys = append(keys, chatsKeyPrefix+uid, groupsKeyPrefix+uid)
+		}
+		c.cache.Del(ctx, keys...)
+	} else {
+		// fallback: хотя бы отправитель
+		c.cache.Del(ctx, chatsKeyPrefix+req.SenderId, groupsKeyPrefix+req.SenderId)
+	}
 	return &chatpb.UpdateLastMessageResponse{Ok: true}, nil
 }
 
