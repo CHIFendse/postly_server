@@ -1,20 +1,22 @@
 package router
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 
+	"github.com/redis/go-redis/v9"
 	"gateway-service/internal/clients"
 	chatpb "postly/proto/chat"
 	userpb "postly/proto/user"
 )
 
-func RegisterChat(mux *http.ServeMux, c *clients.Clients) {
+func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.HandleFunc("/getChats",    JWTMiddleware(c, handleGetChats(c)))
 	mux.HandleFunc("/getGroups",   JWTMiddleware(c, handleGetGroups(c)))
-	mux.HandleFunc("/createChat",  JWTMiddleware(c, handleCreateChat(c)))
-	mux.HandleFunc("/createGroup", JWTMiddleware(c, handleCreateGroup(c)))
+	mux.HandleFunc("/createChat",  JWTMiddleware(c, handleCreateChat(c, cache)))
+	mux.HandleFunc("/createGroup", JWTMiddleware(c, handleCreateGroup(c, cache)))
 	mux.HandleFunc("/clearChat",   JWTMiddleware(c, handleClearChat(c)))
 	mux.HandleFunc("/deleteChat",  JWTMiddleware(c, handleDeleteChat(c)))
 }
@@ -87,7 +89,7 @@ func handleGetGroups(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleCreateChat(c *clients.Clients) http.HandlerFunc {
+func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -126,12 +128,21 @@ func handleCreateChat(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		// Уведомляем другого участника о новом чате
+		go func() {
+			payload, _ := json.Marshal(map[string]string{
+				"type":    "NEW_CHAT",
+				"chat_id": resp.ChatId,
+			})
+			cache.Publish(context.Background(), "ws:user:"+targetResp.UserId, payload)
+		}()
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}
 }
 
-func handleCreateGroup(c *clients.Clients) http.HandlerFunc {
+func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -169,6 +180,17 @@ func handleCreateGroup(c *clients.Clients) http.HandlerFunc {
 			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка создания группы"})
 			return
 		}
+
+		// Уведомляем всех добавленных участников о новой группе
+		go func(groupID string, ids []string) {
+			payload, _ := json.Marshal(map[string]string{
+				"type":    "NEW_CHAT",
+				"chat_id": groupID,
+			})
+			for _, memberID := range ids {
+				cache.Publish(context.Background(), "ws:user:"+memberID, payload)
+			}
+		}(resp.GroupId, memberIDs)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)

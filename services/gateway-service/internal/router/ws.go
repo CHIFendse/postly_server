@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
@@ -118,15 +119,33 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
-	// Отправляем обратно отправителю как NEW_MESSAGE с username — клиент обновит чат-лист
-	confirm, _ := json.Marshal(map[string]string{
-		"type":      "NEW_MESSAGE",
-		"id":        sendResp.MessageId,
-		"msg_id":    sendResp.MessageId,
-		"chat_id":   chatID,
-		"sender_id": senderID,
-		"username":  msg["username"],
-		"text":      text,
+	// Получаем участников и рассылаем всем (включая отправителя) с username и created_at
+	pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
+	if err != nil {
+		log.Printf("WS GetParticipants error: %v", err)
+		// Fallback: хотя бы вернуть отправителю
+		confirm, _ := json.Marshal(map[string]string{
+			"type":      "NEW_MESSAGE",
+			"id":        sendResp.MessageId,
+			"chat_id":   chatID,
+			"sender_id": senderID,
+			"username":  msg["username"],
+			"text":      text,
+		})
+		cache.Publish(ctx, "ws:user:"+senderID, confirm)
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]string{
+		"type":       "NEW_MESSAGE",
+		"id":         sendResp.MessageId,
+		"chat_id":    chatID,
+		"sender_id":  senderID,
+		"username":   msg["username"],
+		"text":       text,
+		"created_at": time.Now().UTC().Format(time.RFC3339),
 	})
-	cache.Publish(ctx, "ws:user:"+senderID, confirm)
+	for _, uid := range pts.UserIds {
+		cache.Publish(ctx, "ws:user:"+uid, payload)
+	}
 }

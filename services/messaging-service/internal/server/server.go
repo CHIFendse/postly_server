@@ -86,8 +86,7 @@ func (s *Messaging) SendMessage(ctx context.Context, req *msgpb.SendMessageReque
 		SenderId: req.SenderId,
 	})
 
-	// Уведомляем участников через Redis pub/sub
-	go s.notifyParticipants(req.ChatId, req.SenderId, newID, req.Text)
+	// Рассылку NEW_MESSAGE делает gateway (у него есть username)
 
 	return &msgpb.SendMessageResponse{MessageId: newID}, nil
 }
@@ -134,27 +133,6 @@ func (s *Messaging) DeleteChatMessages(ctx context.Context, req *msgpb.DeleteCha
 
 // ─── Redis pub/sub broadcast ──────────────────────────────────────────────────
 
-func (s *Messaging) notifyParticipants(chatID, senderID, msgID, text string) {
-	ctx := context.Background()
-	resp, err := s.chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
-	if err != nil {
-		log.Printf("GetParticipants error: %v", err)
-		return
-	}
-	payload, _ := json.Marshal(map[string]string{
-		"type":      "NEW_MESSAGE",
-		"chat_id":   chatID,
-		"sender_id": senderID,
-		"msg_id":    msgID,
-		"text":      text,
-	})
-	for _, uid := range resp.UserIds {
-		if uid != senderID { // отправитель получает подтверждение от WS-хендлера с username
-			s.cache.Publish(ctx, wsPubPrefix+uid, payload)
-		}
-	}
-}
-
 func (s *Messaging) notifyDeleteMessage(chatID, msgID string) {
 	ctx := context.Background()
 	resp, err := s.chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
@@ -162,9 +140,9 @@ func (s *Messaging) notifyDeleteMessage(chatID, msgID string) {
 		return
 	}
 	payload, _ := json.Marshal(map[string]string{
-		"type":    "DELETE_MESSAGE",
-		"chat_id": chatID,
-		"msg_id":  msgID,
+		"type":       "DELETE_MESSAGE",
+		"chat_id":    chatID,
+		"message_id": msgID,
 	})
 	for _, uid := range resp.UserIds {
 		s.cache.Publish(ctx, wsPubPrefix+uid, payload)
