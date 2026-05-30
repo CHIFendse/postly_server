@@ -37,7 +37,7 @@ func (u *User) Register(ctx context.Context, req *userpb.RegisterRequest) (*user
 func (u *User) GetUserByUsername(ctx context.Context, req *userpb.GetUserByUsernameRequest) (*userpb.GetUserByUsernameResponse, error) {
 	var id string
 	err := u.db.QueryRowContext(ctx,
-		`SELECT user_id FROM users WHERE username = $1`,
+		`SELECT user_id FROM users WHERE LOWER(username) = LOWER($1)`,
 		req.Username,
 	).Scan(&id)
 	if err != nil {

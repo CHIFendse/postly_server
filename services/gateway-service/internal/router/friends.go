@@ -26,11 +26,15 @@ func handleSendFriendRequest(c *clients.Clients) http.HandlerFunc {
 		userID := r.Context().Value(UserIDKey).(string)
 
 		var data struct {
-			Username string `json:"username"`
+			Username       string `json:"username"`
+			TargetUsername string `json:"target_username"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
+		}
+		if data.TargetUsername != "" {
+			data.Username = data.TargetUsername
 		}
 
 		target, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.Username})

@@ -34,6 +34,7 @@ func handleLogin(c *clients.Clients) http.HandlerFunc {
 
 		userResp, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.Username})
 		if err != nil {
+			log.Printf("GetUserByUsername(%q) error: %v", data.Username, err)
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Неверный логин или пароль"})
 			return
