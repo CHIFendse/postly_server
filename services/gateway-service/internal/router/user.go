@@ -2,7 +2,6 @@ package router
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -38,19 +37,31 @@ func handleRegister(c *clients.Clients) http.HandlerFunc {
 			Username: data.Username, Email: data.Email, Phone: data.Phone,
 		})
 		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			msg := "Ошибка регистрации"
+			if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "23505") {
+				if strings.Contains(err.Error(), "username") {
+					msg = "Пользователь с таким именем уже существует"
+				} else if strings.Contains(err.Error(), "email") {
+					msg = "Пользователь с такой почтой уже существует"
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]string{"message": msg})
+			return
+		}
 
-		 }
-		
 		_, err = c.Auth.SetCredentials(r.Context(), &authpb.SetCredentialsRequest{
 			UserId: userResp.UserId, Password: data.Password,
 		})
 		if err != nil {
-
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка сохранения пароля"})
+			return
 		}
 
-		_ = fmt.Sprintf("%s %s", data.Username, strings.TrimSpace(data.Email)) // заглушка
-
-		w.WriteHeader(http.StatusNotImplemented)
-		json.NewEncoder(w).Encode(map[string]string{"message": "user-service not ready yet"})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"status": true})
 	}
 }
