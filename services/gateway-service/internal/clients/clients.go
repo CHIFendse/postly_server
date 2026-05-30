@@ -2,13 +2,16 @@
 package clients
 
 import (
+    "context"
+    "log"
     "os"
+    "time"
 
     "google.golang.org/grpc"
     "google.golang.org/grpc/credentials/insecure"
 
     authpb "postly/proto/auth"
-    userpb "postly/proto/user"  
+    userpb "postly/proto/user"
     // chatpb "postly/proto/chat"
 )
 
@@ -27,9 +30,16 @@ func New() *Clients {
 }
 
 func dial(addr string) *grpc.ClientConn {
-    conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+
+    conn, err := grpc.DialContext(ctx, addr,
+        grpc.WithTransportCredentials(insecure.NewCredentials()),
+        grpc.WithBlock(),
+    )
     if err != nil {
-        panic("failed to connect to " + addr + ": " + err.Error())
+        log.Fatalf("cannot connect to %s: %v", addr, err)
     }
+    log.Printf("connected to %s", addr)
     return conn
 }
