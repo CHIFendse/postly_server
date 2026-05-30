@@ -43,21 +43,13 @@ func Start() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleHTTP)
-	mux.HandleFunc("/register", handleRegister)
-	mux.HandleFunc("/login", handleLogin)
 	mux.HandleFunc("/getVersion", handlers.HandleVersion)
 	mux.HandleFunc("/verify", JWTMiddleware(handleVerify))
 	mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
-	mux.HandleFunc("/getChats", JWTMiddleware(handleGetChats))
-	mux.HandleFunc("/getGroups", JWTMiddleware(handleGetGroups))
 	mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
-	mux.HandleFunc("/createChat", JWTMiddleware(handleCreateChat))
-	mux.HandleFunc("/createGroup", JWTMiddleware(handleCreateGroup))
 	mux.HandleFunc("/ws", JWTMiddleware(handleWS))
 	// Message actions
 	mux.HandleFunc("/deleteMessage", JWTMiddleware(handleDeleteMessage))
-	mux.HandleFunc("/clearChat",     JWTMiddleware(handleClearChat))
-	mux.HandleFunc("/deleteChat",    JWTMiddleware(handleDeleteChat))
 	// Friends
 	mux.HandleFunc("/sendFriendRequest",    JWTMiddleware(handleSendFriendRequest))
 	mux.HandleFunc("/getFriendRequests",    JWTMiddleware(handleGetFriendRequests))

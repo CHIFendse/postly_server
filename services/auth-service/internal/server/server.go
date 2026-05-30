@@ -73,8 +73,6 @@ func (s *Auth) Login(ctx context.Context, req *authpb.LoginRequest) (*authpb.Log
 	return &authpb.LoginResponse{Token: token}, nil
 }
 
-// ValidateToken вызывается gateway на каждый входящий запрос.
-// Результат кешируется в Redis чтобы не парсить JWT каждый раз.
 func (s *Auth) ValidateToken(ctx context.Context, req *authpb.ValidateTokenRequest) (*authpb.ValidateTokenResponse, error) {
 	key := tokenCachePrefix + req.Token
 

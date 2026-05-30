@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package chat;
+
+option go_package = "proto/chat";
+
+service ChatService {
+  rpc GetChats(GetChatsRequest)       returns (GetChatsResponse);
+  rpc CreateChat(CreateChatRequest)   returns (CreateChatResponse);
+  rpc DeleteChat(DeleteChatRequest)   returns (DeleteChatResponse);
+  rpc ClearChat(ClearChatRequest)     returns (ClearChatResponse);
+
+  rpc GetGroups(GetGroupsRequest)     returns (GetGroupsResponse);
+  rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
+
+  rpc GetParticipants(GetParticipantsRequest) returns (GetParticipantsResponse);
+}
+
+message Chat {
+  string id              = 1;
+  string name            = 2;
+  string last_message    = 3;
+  string last_msg_sender = 4;
+  int64  updated_at      = 5;
+}
+
+message GetChatsRequest  { string user_id = 1; }
+message GetChatsResponse { repeated Chat chats = 1; }
+
+message CreateChatRequest {
+  string user_id         = 1;
+  string target_username = 2;
+}
+message CreateChatResponse {
+  string chat_id   = 1;
+  string target_id = 2;
+}
+
+message DeleteChatRequest  { string chat_id = 1; string user_id = 2; }
+message DeleteChatResponse { bool ok = 1; }
+
+message ClearChatRequest  { string chat_id = 1; string user_id = 2; }
+message ClearChatResponse { bool ok = 1; }
+
+message Group {
+  string id              = 1;
+  string name            = 2;
+  string last_message    = 3;
+  string last_msg_sender = 4;
+  int64  updated_at      = 5;
+}
+
+message GetGroupsRequest  { string user_id = 1; }
+message GetGroupsResponse { repeated Group groups = 1; }
+
+message CreateGroupRequest {
+  string          name       = 1;
+  string          admin_id   = 2;
+  bool            is_private = 3;
+  repeated string members    = 4;
+}
+message CreateGroupResponse { string group_id = 1; }
+
+// ─── Participants (нужно realtime-service для broadcast) ──────────────────────
+
+message GetParticipantsRequest  { string chat_id = 1; }
+message GetParticipantsResponse { repeated string user_ids = 1; }

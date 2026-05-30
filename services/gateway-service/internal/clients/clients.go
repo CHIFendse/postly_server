@@ -12,20 +12,20 @@ import (
 
     authpb "postly/proto/auth"
     userpb "postly/proto/user"
-    // chatpb "postly/proto/chat"
+    chatpb "postly/proto/chat"
 )
 
 type Clients struct {
     Auth authpb.AuthServiceClient
     User userpb.UserServiceClient
-    // Chat chatpb.ChatServiceClient
+    Chat chatpb.ChatServiceClient
 }
 
 func New() *Clients {
     return &Clients{
         Auth: authpb.NewAuthServiceClient(dial(os.Getenv("AUTH_SERVICE_ADDR"))),
         User: userpb.NewUserServiceClient(dial(os.Getenv("USER_SERVICE_ADDR"))),
-        // Chat: chatpb.NewChatServiceClient(dial(os.Getenv("CHAT_SERVICE_ADDR"))),
+        Chat: chatpb.NewChatServiceClient(dial(os.Getenv("CHAT_SERVICE_ADDR"))),
     }
 }
 
