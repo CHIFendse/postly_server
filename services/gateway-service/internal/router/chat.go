@@ -17,8 +17,8 @@ func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.HandleFunc("/getGroups",   JWTMiddleware(c, handleGetGroups(c)))
 	mux.HandleFunc("/createChat",  JWTMiddleware(c, handleCreateChat(c, cache)))
 	mux.HandleFunc("/createGroup", JWTMiddleware(c, handleCreateGroup(c, cache)))
-	mux.HandleFunc("/clearChat",   JWTMiddleware(c, handleClearChat(c)))
-	mux.HandleFunc("/deleteChat",  JWTMiddleware(c, handleDeleteChat(c)))
+	mux.HandleFunc("/clearChat",   JWTMiddleware(c, handleClearChat(c, cache)))
+	mux.HandleFunc("/deleteChat",  JWTMiddleware(c, handleDeleteChat(c, cache)))
 }
 
 func handleGetChats(c *clients.Clients) http.HandlerFunc {
@@ -243,7 +243,7 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 	}
 }
 
-func handleClearChat(c *clients.Clients) http.HandlerFunc {
+func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -258,6 +258,9 @@ func handleClearChat(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
+
+		// Получаем участников ДО очистки
+		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatID})
 
 		_, err := c.Chat.ClearChat(r.Context(), &chatpb.ClearChatRequest{
 			ChatId: data.ChatID,
@@ -269,12 +272,25 @@ func handleClearChat(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		// Уведомляем всех участников
+		if pts != nil {
+			go func() {
+				payload, _ := json.Marshal(map[string]string{
+					"type":    "CLEAR_CHAT",
+					"chat_id": data.ChatID,
+				})
+				for _, uid := range pts.UserIds {
+					cache.Publish(context.Background(), "ws:user:"+uid, payload)
+				}
+			}()
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]bool{"status": true})
 	}
 }
 
-func handleDeleteChat(c *clients.Clients) http.HandlerFunc {
+func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -290,6 +306,9 @@ func handleDeleteChat(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		// Получаем участников ДО удаления (после — список недоступен)
+		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatID})
+
 		_, err := c.Chat.DeleteChat(r.Context(), &chatpb.DeleteChatRequest{
 			ChatId: data.ChatID,
 			UserId: userID,
@@ -298,6 +317,19 @@ func handleDeleteChat(c *clients.Clients) http.HandlerFunc {
 			w.WriteHeader(http.StatusForbidden)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка удаления чата"})
 			return
+		}
+
+		// Уведомляем всех участников
+		if pts != nil {
+			go func() {
+				payload, _ := json.Marshal(map[string]string{
+					"type":    "DELETE_CHAT",
+					"chat_id": data.ChatID,
+				})
+				for _, uid := range pts.UserIds {
+					cache.Publish(context.Background(), "ws:user:"+uid, payload)
+				}
+			}()
 		}
 
 		w.Header().Set("Content-Type", "application/json")
