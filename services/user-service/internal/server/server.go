@@ -5,6 +5,8 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"log"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	userpb "postly/proto/user"
 
 )
@@ -29,4 +31,17 @@ func (u *User) Register(ctx context.Context, req *userpb.RegisterRequest) (*user
 		return nil, err
 	}
 	return &userpb.RegisterResponse{UserId: id}, nil
+}
+
+
+func (u *User) GetUserByUsername(ctx context.Context, req *userpb.GetUserByUsernameRequest) (*userpb.GetUserByUsernameResponse, error) {
+    var id string
+    err := u.db.QueryRowContext(ctx,
+        `SELECT user_id FROM users WHERE username = $1`,
+        req.Username,
+    ).Scan(&id)
+    if err != nil {
+        return nil, status.Error(codes.NotFound, "user not found")
+    }
+    return &userpb.GetUserByUsernameResponse{UserId: id}, nil
 }

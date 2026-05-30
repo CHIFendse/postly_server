@@ -5,6 +5,7 @@ import (
 	"gateway-service/internal/clients"
 	"net/http"
 	authpb "postly/proto/auth"
+	userpb "postly/proto/user"
 )
 
 func RegisterAuth(mux *http.ServeMux, c *clients.Clients) {
@@ -30,11 +31,9 @@ func handleLogin(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		// TODO: когда появится user-service — получить user_id по username:
-		// userResp, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.Username})
+		userResp, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.Username})
 
-		// Временно: передаём username как user_id до появления user-service
-		tokenResp, err := c.Auth.Login(r.Context(), &authpb.LoginRequest{UserId: data.Username, Password: data.Password})
+		tokenResp, err := c.Auth.Login(r.Context(), &authpb.LoginRequest{UserId: userResp.UserId, Password: data.Password})
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Неверный логин или пароль"})
