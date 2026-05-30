@@ -118,9 +118,10 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
-	// Подтверждение отправителю с реальным message_id
+	// Отправляем обратно отправителю как NEW_MESSAGE с username — клиент обновит чат-лист
 	confirm, _ := json.Marshal(map[string]string{
-		"type":      "MSG_CONFIRM",
+		"type":      "NEW_MESSAGE",
+		"id":        sendResp.MessageId,
 		"msg_id":    sendResp.MessageId,
 		"chat_id":   chatID,
 		"sender_id": senderID,

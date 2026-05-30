@@ -149,7 +149,9 @@ func (s *Messaging) notifyParticipants(chatID, senderID, msgID, text string) {
 		"text":      text,
 	})
 	for _, uid := range resp.UserIds {
-		s.cache.Publish(ctx, wsPubPrefix+uid, payload)
+		if uid != senderID { // отправитель получает подтверждение от WS-хендлера с username
+			s.cache.Publish(ctx, wsPubPrefix+uid, payload)
+		}
 	}
 }
 

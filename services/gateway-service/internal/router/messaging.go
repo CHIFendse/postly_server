@@ -49,7 +49,7 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 			}
 		}
 
-		// Собираем ответ с username
+		// Собираем ответ с username. created_at → миллисекунды (клиент ждёт ms для new Date())
 		type msgOut struct {
 			Id        string `json:"id"`
 			ChatId    string `json:"chat_id"`
@@ -65,7 +65,7 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 				ChatId:    m.ChatId,
 				SenderId:  m.SenderId,
 				Text:      m.Text,
-				CreatedAt: m.CreatedAt,
+				CreatedAt: m.CreatedAt * 1000, // секунды → миллисекунды
 				Username:  usernames[m.SenderId],
 			})
 		}
