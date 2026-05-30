@@ -2,12 +2,13 @@ package router
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
 	"gateway-service/internal/clients"
-	userpb "postly/proto/user"
 	authpb "postly/proto/auth"
+	userpb "postly/proto/user"
 )
 
 func RegisterUser(mux *http.ServeMux, c *clients.Clients) {
@@ -37,6 +38,7 @@ func handleRegister(c *clients.Clients) http.HandlerFunc {
 			Username: data.Username, Email: data.Email, Phone: data.Phone,
 		})
 		if err != nil {
+			log.Printf("user.Register error: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			msg := "Ошибка регистрации"
@@ -55,6 +57,7 @@ func handleRegister(c *clients.Clients) http.HandlerFunc {
 			UserId: userResp.UserId, Password: data.Password,
 		})
 		if err != nil {
+			log.Printf("auth.SetCredentials error: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка сохранения пароля"})
