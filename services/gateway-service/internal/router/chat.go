@@ -106,7 +106,6 @@ func handleCreateGroup(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		// Резолвим usernames → user_ids через user-service
 		memberIDs := []string{}
 		for _, username := range data.Members {
 			u, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: username})

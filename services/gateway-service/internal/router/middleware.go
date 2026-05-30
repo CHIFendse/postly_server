@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"gateway-service/internal/clients"
 	authpb "postly/proto/auth"
@@ -27,7 +28,9 @@ func JWTMiddleware(c *clients.Clients, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), UserIDKey, resp.UserId)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		ctx = context.WithValue(ctx, UserIDKey, resp.UserId)
 		next(w, r.WithContext(ctx))
 	}
 }
