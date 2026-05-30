@@ -2,6 +2,7 @@ package router
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"gateway-service/internal/clients"
@@ -72,6 +73,7 @@ func handleCreateChat(c *clients.Clients) http.HandlerFunc {
 
 		targetResp, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.Username})
 		if err != nil {
+			log.Printf("createChat: GetUserByUsername(%q) err: %v", data.Username, err)
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Пользователь не найден"})
 			return
@@ -82,6 +84,7 @@ func handleCreateChat(c *clients.Clients) http.HandlerFunc {
 			TargetUsername: targetResp.UserId,
 		})
 		if err != nil {
+			log.Printf("createChat: Chat.CreateChat err: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка создания чата"})
 			return

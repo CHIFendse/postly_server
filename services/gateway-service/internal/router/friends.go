@@ -70,8 +70,29 @@ func handleGetFriendRequests(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		type reqOut struct {
+			Id        string `json:"id"`
+			SenderId  string `json:"sender_id"`
+			Username  string `json:"username"`
+			CreatedAt int64  `json:"created_at"`
+		}
+		out := make([]reqOut, 0, len(resp.Requests))
+		for _, req := range resp.Requests {
+			username := req.SenderId
+			u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: req.SenderId})
+			if err == nil {
+				username = u.Username
+			}
+			out = append(out, reqOut{
+				Id:        req.Id,
+				SenderId:  req.SenderId,
+				Username:  username,
+				CreatedAt: req.CreatedAt,
+			})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp.Requests)
+		json.NewEncoder(w).Encode(out)
 	}
 }
 
