@@ -30,26 +30,39 @@ func handleGetChats(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		// name в чате = UUID другого пользователя — резолвим в username
+		// name = UUID другого пользователя, last_msg_sender = UUID отправителя — резолвим оба
 		type chatOut struct {
-			Id            string `json:"id"`
-			Name          string `json:"name"`
-			LastMessage   string `json:"last_message"`
-			LastMsgSender string `json:"username"`
-			UpdatedAt     int64  `json:"updated_at"`
+			Id          string `json:"id"`
+			Name        string `json:"name"`
+			LastMessage string `json:"last_message"`
+			Username    string `json:"username"`
+			UpdatedAt   int64  `json:"updated_at"`
 		}
+
+		// Кешируем resolved UUID → username в рамках запроса
+		resolved := map[string]string{}
+		resolve := func(uid string) string {
+			if uid == "" {
+				return ""
+			}
+			if v, ok := resolved[uid]; ok {
+				return v
+			}
+			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: uid}); err == nil {
+				resolved[uid] = u.Username
+				return u.Username
+			}
+			return ""
+		}
+
 		out := make([]chatOut, 0, len(resp.Chats))
 		for _, ch := range resp.Chats {
-			name := ch.Name
-			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: ch.Name}); err == nil {
-				name = u.Username
-			}
 			out = append(out, chatOut{
-				Id:            ch.Id,
-				Name:          name,
-				LastMessage:   ch.LastMessage,
-				LastMsgSender: ch.LastMsgSender,
-				UpdatedAt:     ch.UpdatedAt,
+				Id:          ch.Id,
+				Name:        resolve(ch.Name),
+				LastMessage: ch.LastMessage,
+				Username:    resolve(ch.LastMsgSender),
+				UpdatedAt:   ch.UpdatedAt,
 			})
 		}
 
