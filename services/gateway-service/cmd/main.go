@@ -30,7 +30,7 @@ func main() {
 	router.Setup(mux, c, cache)
 
 	addr := ":" + getenv("HTTP_PORT", "8081")
-	srv := &http.Server{Addr: addr, Handler: mux}
+	srv := &http.Server{Addr: addr, Handler: router.CORS(mux)}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
