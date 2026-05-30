@@ -169,7 +169,20 @@ func handleGetFriends(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		type friendOut struct {
+			Id       string `json:"id"`
+			Username string `json:"username"`
+		}
+		out := make([]friendOut, 0, len(resp.Friends))
+		for _, f := range resp.Friends {
+			username := f.UserId
+			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: f.UserId}); err == nil {
+				username = u.Username
+			}
+			out = append(out, friendOut{Id: f.UserId, Username: username})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp.Friends)
+		json.NewEncoder(w).Encode(out)
 	}
 }

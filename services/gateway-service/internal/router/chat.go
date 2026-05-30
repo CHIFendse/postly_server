@@ -30,8 +30,31 @@ func handleGetChats(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		// name в чате = UUID другого пользователя — резолвим в username
+		type chatOut struct {
+			Id            string `json:"id"`
+			Name          string `json:"name"`
+			LastMessage   string `json:"last_message"`
+			LastMsgSender string `json:"username"`
+			UpdatedAt     int64  `json:"updated_at"`
+		}
+		out := make([]chatOut, 0, len(resp.Chats))
+		for _, ch := range resp.Chats {
+			name := ch.Name
+			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: ch.Name}); err == nil {
+				name = u.Username
+			}
+			out = append(out, chatOut{
+				Id:            ch.Id,
+				Name:          name,
+				LastMessage:   ch.LastMessage,
+				LastMsgSender: ch.LastMsgSender,
+				UpdatedAt:     ch.UpdatedAt,
+			})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp.Chats)
+		json.NewEncoder(w).Encode(out)
 	}
 }
 
