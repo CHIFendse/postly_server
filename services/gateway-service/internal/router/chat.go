@@ -84,8 +84,43 @@ func handleGetGroups(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		// Резолвим UUID отправителя → username (как в handleGetChats)
+		type groupOut struct {
+			Id          string `json:"id"`
+			Name        string `json:"name"`
+			LastMessage string `json:"last_message"`
+			Username    string `json:"username"`
+			UpdatedAt   int64  `json:"updated_at"`
+		}
+
+		resolved := map[string]string{}
+		resolve := func(uid string) string {
+			if uid == "" {
+				return ""
+			}
+			if v, ok := resolved[uid]; ok {
+				return v
+			}
+			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: uid}); err == nil {
+				resolved[uid] = u.Username
+				return u.Username
+			}
+			return ""
+		}
+
+		out := make([]groupOut, 0, len(resp.Groups))
+		for _, g := range resp.Groups {
+			out = append(out, groupOut{
+				Id:          g.Id,
+				Name:        g.Name,
+				LastMessage: g.LastMessage,
+				Username:    resolve(g.LastMsgSender),
+				UpdatedAt:   g.UpdatedAt,
+			})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp.Groups)
+		json.NewEncoder(w).Encode(out)
 	}
 }
 
@@ -161,9 +196,11 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}
 
 		memberIDs := []string{}
+		notFound := []string{}
 		for _, username := range data.Members {
 			u, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: username})
 			if err != nil {
+				notFound = append(notFound, username)
 				continue
 			}
 			memberIDs = append(memberIDs, u.UserId)
@@ -193,7 +230,16 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}(resp.GroupId, memberIDs)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		type groupCreateOut struct {
+			GroupId  string   `json:"group_id"`
+			Id       string   `json:"id"`
+			NotFound []string `json:"not_found,omitempty"`
+		}
+		json.NewEncoder(w).Encode(groupCreateOut{
+			GroupId:  resp.GroupId,
+			Id:       resp.GroupId,
+			NotFound: notFound,
+		})
 	}
 }
 

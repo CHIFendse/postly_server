@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
