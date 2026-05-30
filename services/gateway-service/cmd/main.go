@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 
 	"gateway-service/internal/clients"
 	"gateway-service/internal/router"
@@ -20,8 +21,13 @@ func main() {
 
 	c := clients.New()
 
+	cache := redis.NewClient(&redis.Options{
+		Addr:     getenv("REDIS_HOST", "localhost") + ":" + getenv("REDIS_PORT", "6379"),
+		Password: os.Getenv("REDIS_PASSWORD"),
+	})
+
 	mux := http.NewServeMux()
-	router.Setup(mux, c)
+	router.Setup(mux, c, cache)
 
 	addr := ":" + getenv("HTTP_PORT", "8081")
 	srv := &http.Server{Addr: addr, Handler: mux}

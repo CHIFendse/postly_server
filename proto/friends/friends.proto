@@ -1,0 +1,34 @@
+syntax = "proto3";
+package friends;
+option go_package = "proto/friends";
+
+service FriendsService {
+  rpc SendFriendRequest(SendFriendRequestReq)     returns (SendFriendRequestResp);
+  rpc GetFriendRequests(GetFriendRequestsReq)     returns (GetFriendRequestsResp);
+  rpc AcceptFriendRequest(AcceptFriendRequestReq) returns (AcceptFriendRequestResp);
+  rpc DeclineFriendRequest(DeclineFriendReq)      returns (DeclineFriendResp);
+  rpc GetFriends(GetFriendsReq)                   returns (GetFriendsResp);
+}
+
+message FriendRequest {
+  string id         = 1;
+  string sender_id  = 2;
+  int64  created_at = 3;
+}
+
+message Friend { string user_id = 1; }
+
+message SendFriendRequestReq  { string sender_id = 1; string receiver_id = 2; }
+message SendFriendRequestResp { string request_id = 1; string receiver_id = 2; }
+
+message GetFriendRequestsReq  { string user_id = 1; }
+message GetFriendRequestsResp { repeated FriendRequest requests = 1; }
+
+message AcceptFriendRequestReq  { string user_id = 1; string request_id = 2; }
+message AcceptFriendRequestResp { string sender_id = 1; }
+
+message DeclineFriendReq  { string user_id = 1; string request_id = 2; }
+message DeclineFriendResp { bool ok = 1; }
+
+message GetFriendsReq  { string user_id = 1; }
+message GetFriendsResp { repeated Friend friends = 1; }

@@ -14,6 +14,7 @@ service ChatService {
   rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
 
   rpc GetParticipants(GetParticipantsRequest) returns (GetParticipantsResponse);
+  rpc UpdateLastMessage(UpdateLastMessageRequest) returns (UpdateLastMessageResponse);
 }
 
 message Chat {
@@ -65,3 +66,10 @@ message CreateGroupResponse { string group_id = 1; }
 
 message GetParticipantsRequest  { string chat_id = 1; }
 message GetParticipantsResponse { repeated string user_ids = 1; }
+
+message UpdateLastMessageRequest {
+  string chat_id   = 1;
+  string text      = 2;
+  string sender_id = 3;
+}
+message UpdateLastMessageResponse { bool ok = 1; }

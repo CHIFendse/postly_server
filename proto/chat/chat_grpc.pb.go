@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChatService_GetChats_FullMethodName        = "/chat.ChatService/GetChats"
-	ChatService_CreateChat_FullMethodName      = "/chat.ChatService/CreateChat"
-	ChatService_DeleteChat_FullMethodName      = "/chat.ChatService/DeleteChat"
-	ChatService_ClearChat_FullMethodName       = "/chat.ChatService/ClearChat"
-	ChatService_GetGroups_FullMethodName       = "/chat.ChatService/GetGroups"
-	ChatService_CreateGroup_FullMethodName     = "/chat.ChatService/CreateGroup"
-	ChatService_GetParticipants_FullMethodName = "/chat.ChatService/GetParticipants"
+	ChatService_GetChats_FullMethodName          = "/chat.ChatService/GetChats"
+	ChatService_CreateChat_FullMethodName        = "/chat.ChatService/CreateChat"
+	ChatService_DeleteChat_FullMethodName        = "/chat.ChatService/DeleteChat"
+	ChatService_ClearChat_FullMethodName         = "/chat.ChatService/ClearChat"
+	ChatService_GetGroups_FullMethodName         = "/chat.ChatService/GetGroups"
+	ChatService_CreateGroup_FullMethodName       = "/chat.ChatService/CreateGroup"
+	ChatService_GetParticipants_FullMethodName   = "/chat.ChatService/GetParticipants"
+	ChatService_UpdateLastMessage_FullMethodName = "/chat.ChatService/UpdateLastMessage"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -39,6 +40,7 @@ type ChatServiceClient interface {
 	GetGroups(ctx context.Context, in *GetGroupsRequest, opts ...grpc.CallOption) (*GetGroupsResponse, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*CreateGroupResponse, error)
 	GetParticipants(ctx context.Context, in *GetParticipantsRequest, opts ...grpc.CallOption) (*GetParticipantsResponse, error)
+	UpdateLastMessage(ctx context.Context, in *UpdateLastMessageRequest, opts ...grpc.CallOption) (*UpdateLastMessageResponse, error)
 }
 
 type chatServiceClient struct {
@@ -119,6 +121,16 @@ func (c *chatServiceClient) GetParticipants(ctx context.Context, in *GetParticip
 	return out, nil
 }
 
+func (c *chatServiceClient) UpdateLastMessage(ctx context.Context, in *UpdateLastMessageRequest, opts ...grpc.CallOption) (*UpdateLastMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateLastMessageResponse)
+	err := c.cc.Invoke(ctx, ChatService_UpdateLastMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -130,6 +142,7 @@ type ChatServiceServer interface {
 	GetGroups(context.Context, *GetGroupsRequest) (*GetGroupsResponse, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*CreateGroupResponse, error)
 	GetParticipants(context.Context, *GetParticipantsRequest) (*GetParticipantsResponse, error)
+	UpdateLastMessage(context.Context, *UpdateLastMessageRequest) (*UpdateLastMessageResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -160,6 +173,9 @@ func (UnimplementedChatServiceServer) CreateGroup(context.Context, *CreateGroupR
 }
 func (UnimplementedChatServiceServer) GetParticipants(context.Context, *GetParticipantsRequest) (*GetParticipantsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetParticipants not implemented")
+}
+func (UnimplementedChatServiceServer) UpdateLastMessage(context.Context, *UpdateLastMessageRequest) (*UpdateLastMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateLastMessage not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -308,6 +324,24 @@ func _ChatService_GetParticipants_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_UpdateLastMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLastMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).UpdateLastMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_UpdateLastMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).UpdateLastMessage(ctx, req.(*UpdateLastMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -342,6 +376,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetParticipants",
 			Handler:    _ChatService_GetParticipants_Handler,
+		},
+		{
+			MethodName: "UpdateLastMessage",
+			Handler:    _ChatService_UpdateLastMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

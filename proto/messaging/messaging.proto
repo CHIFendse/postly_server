@@ -1,0 +1,34 @@
+syntax = "proto3";
+package messaging;
+option go_package = "proto/messaging";
+
+service MessagingService {
+  rpc GetMessages(GetMessagesRequest)           returns (GetMessagesResponse);
+  rpc SendMessage(SendMessageRequest)           returns (SendMessageResponse);
+  rpc DeleteMessage(DeleteMessageRequest)       returns (DeleteMessageResponse);
+  rpc DeleteChatMessages(DeleteChatMsgsRequest) returns (DeleteChatMsgsResponse);
+}
+
+message Message {
+  string id         = 1;
+  string chat_id    = 2;
+  string sender_id  = 3;
+  string text       = 4;
+  int64  created_at = 5;
+}
+
+message GetMessagesRequest  { string chat_id = 1; }
+message GetMessagesResponse { repeated Message messages = 1; }
+
+message SendMessageRequest {
+  string chat_id   = 1;
+  string sender_id = 2;
+  string text      = 3;
+}
+message SendMessageResponse { string message_id = 1; }
+
+message DeleteMessageRequest  { string message_id = 1; string sender_id = 2; }
+message DeleteMessageResponse { string chat_id = 1; }
+
+message DeleteChatMsgsRequest  { string chat_id = 1; }
+message DeleteChatMsgsResponse { bool ok = 1; }
