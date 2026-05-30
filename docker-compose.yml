@@ -1,17 +1,133 @@
 services:
-  db:
-    image: postgres:16
-    container_name: my-postgres-db
-    restart: always
+
+  # ── Инфраструктура ───────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
+      POSTGRES_DB:       ${DB_NAME}
+      POSTGRES_USER:     ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5432:5432"
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
       - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Порт не публикуется — только внутренняя сеть
+    expose:
+      - "5432"
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    expose:
+      - "6379"
+    networks:
+      - internal
+
+  # ── Микросервисы (без доступа из интернета) ──────────────────────────────────
+
+  auth-service:
+    build: ./services/auth-service
+    restart: unless-stopped
+    env_file: ./services/auth-service/.env
+    expose:
+      - "50051"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - internal
+
+  user-service:
+    build: ./services/user-service
+    restart: unless-stopped
+    env_file: ./services/user-service/.env
+    expose:
+      - "50052"
+    depends_on:
+      - postgres
+    networks:
+      - internal
+
+  chat-service:
+    build: ./services/chat-service
+    restart: unless-stopped
+    env_file: ./services/chat-service/.env
+    expose:
+      - "50053"
+    depends_on:
+      - postgres
+    networks:
+      - internal
+
+  messaging-service:
+    build: ./services/messaging-service
+    restart: unless-stopped
+    env_file: ./services/messaging-service/.env
+    expose:
+      - "50054"
+    depends_on:
+      - postgres
+    networks:
+      - internal
+
+  friends-service:
+    build: ./services/friends-service
+    restart: unless-stopped
+    env_file: ./services/friends-service/.env
+    expose:
+      - "50055"
+    depends_on:
+      - postgres
+    networks:
+      - internal
+
+  realtime-service:
+    build: ./services/realtime-service
+    restart: unless-stopped
+    env_file: ./services/realtime-service/.env
+    expose:
+      - "50056"
+    depends_on:
+      - redis
+    networks:
+      - internal
+
+  call-service:
+    build: ./services/call-service
+    restart: unless-stopped
+    env_file: ./services/call-service/.env
+    ports:
+      - "8082:8082/udp"   # DTLS — клиенты подключаются напрямую
+    networks:
+      - internal
+
+  # ── Gateway — единственная точка входа из интернета ──────────────────────────
+
+  gateway:
+    build: ./services/gateway-service
+    restart: unless-stopped
+    env_file: ./services/gateway-service/.env
+    ports:
+      - "8081:8081"
+    depends_on:
+      - auth-service
+      - user-service
+      - chat-service
+      - messaging-service
+      - friends-service
+      - realtime-service
+    networks:
+      - internal
+
+# ── Сеть ─────────────────────────────────────────────────────────────────────
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
   pgdata:
