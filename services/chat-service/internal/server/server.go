@@ -256,7 +256,14 @@ func (c *Chat) CreateGroup(ctx context.Context, req *chatpb.CreateGroupRequest) 
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	c.cache.Del(ctx, groupsKeyPrefix+req.AdminId)
+	// Инвалидируем кеш групп для всех участников
+	cacheKeys := []string{groupsKeyPrefix + req.AdminId}
+	for _, memberID := range req.Members {
+		if memberID != req.AdminId {
+			cacheKeys = append(cacheKeys, groupsKeyPrefix+memberID)
+		}
+	}
+	c.cache.Del(ctx, cacheKeys...)
 	return &chatpb.CreateGroupResponse{GroupId: newID}, nil
 }
 
