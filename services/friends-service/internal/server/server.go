@@ -153,7 +153,7 @@ func (s *Friends) GetFriends(ctx context.Context, req *friendspb.GetFriendsReq) 
 	}
 	defer rows.Close()
 
-	resp := &friendspb.GetFriendsResp{}
+	resp := &friendspb.GetFriendsResp{Friends: []*friendspb.Friend{}}
 	for rows.Next() {
 		f := &friendspb.Friend{}
 		if err := rows.Scan(&f.UserId); err != nil {

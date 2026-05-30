@@ -306,6 +306,21 @@ func (c *Chat) GetParticipants(ctx context.Context, req *chatpb.GetParticipantsR
 	return &chatpb.GetParticipantsResponse{UserIds: ids}, nil
 }
 
+// ─── UpdateLastMessage (вызывается messaging-service) ────────────────────────
+
+func (c *Chat) UpdateLastMessage(ctx context.Context, req *chatpb.UpdateLastMessageRequest) (*chatpb.UpdateLastMessageResponse, error) {
+	c.db.ExecContext(ctx,
+		`UPDATE chats SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
+		req.Text, req.SenderId, req.ChatId,
+	)
+	c.db.ExecContext(ctx,
+		`UPDATE groups SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
+		req.Text, req.SenderId, req.ChatId,
+	)
+	c.cache.Del(ctx, chatsKeyPrefix+req.SenderId, groupsKeyPrefix+req.SenderId)
+	return &chatpb.UpdateLastMessageResponse{Ok: true}, nil
+}
+
 // ─── Инвалидация кеша ─────────────────────────────────────────────────────────
 
 func (c *Chat) invalidateChat(ctx context.Context, chatID, userID string) {

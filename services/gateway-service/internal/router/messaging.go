@@ -6,6 +6,7 @@ import (
 
 	"gateway-service/internal/clients"
 	msgpb "postly/proto/messaging"
+	userpb "postly/proto/user"
 )
 
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
@@ -16,7 +17,15 @@ func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
 
 func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Поддержка и GET ?chat_id=... и POST {chat_id: ...}
 		chatID := r.URL.Query().Get("chat_id")
+		if chatID == "" {
+			var body struct {
+				ChatID string `json:"chat_id"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			chatID = body.ChatID
+		}
 		if chatID == "" {
 			http.Error(w, "chat_id required", http.StatusBadRequest)
 			return
@@ -29,8 +38,40 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
+		// Резолвим sender_id → username для каждого уникального отправителя
+		usernames := map[string]string{}
+		for _, m := range resp.Messages {
+			if _, ok := usernames[m.SenderId]; !ok {
+				u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: m.SenderId})
+				if err == nil {
+					usernames[m.SenderId] = u.Username
+				}
+			}
+		}
+
+		// Собираем ответ с username
+		type msgOut struct {
+			Id        string `json:"id"`
+			ChatId    string `json:"chat_id"`
+			SenderId  string `json:"sender_id"`
+			Text      string `json:"text"`
+			CreatedAt int64  `json:"created_at"`
+			Username  string `json:"username"`
+		}
+		out := make([]msgOut, 0, len(resp.Messages))
+		for _, m := range resp.Messages {
+			out = append(out, msgOut{
+				Id:        m.Id,
+				ChatId:    m.ChatId,
+				SenderId:  m.SenderId,
+				Text:      m.Text,
+				CreatedAt: m.CreatedAt,
+				Username:  usernames[m.SenderId],
+			})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp.Messages)
+		json.NewEncoder(w).Encode(out)
 	}
 }
 

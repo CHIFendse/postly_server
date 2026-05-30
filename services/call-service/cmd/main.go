@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	dtls "github.com/pion/dtls/v2"

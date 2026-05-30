@@ -35,13 +35,25 @@ func (u *User) Register(ctx context.Context, req *userpb.RegisterRequest) (*user
 
 
 func (u *User) GetUserByUsername(ctx context.Context, req *userpb.GetUserByUsernameRequest) (*userpb.GetUserByUsernameResponse, error) {
-    var id string
-    err := u.db.QueryRowContext(ctx,
-        `SELECT user_id FROM users WHERE username = $1`,
-        req.Username,
-    ).Scan(&id)
-    if err != nil {
-        return nil, status.Error(codes.NotFound, "user not found")
-    }
-    return &userpb.GetUserByUsernameResponse{UserId: id}, nil
+	var id string
+	err := u.db.QueryRowContext(ctx,
+		`SELECT user_id FROM users WHERE username = $1`,
+		req.Username,
+	).Scan(&id)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+	return &userpb.GetUserByUsernameResponse{UserId: id}, nil
+}
+
+func (u *User) GetUserByUserId(ctx context.Context, req *userpb.GetUserByUserIdRequest) (*userpb.GetUserByUserIdResponse, error) {
+	var username string
+	err := u.db.QueryRowContext(ctx,
+		`SELECT username FROM users WHERE user_id = $1`,
+		req.UserId,
+	).Scan(&username)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+	return &userpb.GetUserByUserIdResponse{UserId: req.UserId, Username: username}, nil
 }
