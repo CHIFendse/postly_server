@@ -148,9 +148,12 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 	})
 }
 
-// sendMessagePush — notification + data.
-// "notification" field lets Android display it automatically when app is killed.
-// "data" contains enough info for PostlyMessagingService when app is foreground.
+// sendMessagePush — DATA-ONLY, HIGH priority.
+// Data-only ensures PostlyMessagingService.onMessageReceived fires in all app states
+// so we can show a proper notification with sound + vibration (IMPORTANCE_HIGH channel).
+// A "notification" field would bypass onMessageReceived when app is in background,
+// relying on the Firebase SDK default display which often silences on first install
+// (channel not yet created) and doesn't call our custom handler.
 func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, senderName, text, chatID string) {
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
@@ -162,23 +165,18 @@ func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, send
 	}
 	fcmSend(ctx, map[string]any{
 		"token": deviceToken,
-		"notification": map[string]string{
-			"title": senderName,
-			"body":  preview,
-		},
+		// NO "notification" field — data-only so onMessageReceived always fires
 		"android": map[string]any{
-			"priority": "NORMAL",
-			"notification": map[string]any{
-				"channel_id": "postly_messages",
-				"sound":      "default",
-			},
+			"priority": "HIGH", // wake device from doze for real-time delivery
 		},
 		"apns": map[string]any{
+			"headers": map[string]string{"apns-priority": "10"},
 			"payload": map[string]any{
 				"aps": map[string]any{
 					"alert": map[string]string{"title": senderName, "body": preview},
 					"sound": "default",
 					"badge": 1,
+					"content-available": 1,
 				},
 			},
 		},
@@ -186,7 +184,7 @@ func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, send
 			"type":     "NEW_MESSAGE",
 			"chat_id":  chatID,
 			"text":     preview,
-			"username": senderName, // needed by PostlyMessagingService.handleMessage
+			"username": senderName,
 		},
 	})
 }
