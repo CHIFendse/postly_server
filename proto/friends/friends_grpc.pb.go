@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -24,6 +25,7 @@ const (
 	FriendsService_AcceptFriendRequest_FullMethodName  = "/friends.FriendsService/AcceptFriendRequest"
 	FriendsService_DeclineFriendRequest_FullMethodName = "/friends.FriendsService/DeclineFriendRequest"
 	FriendsService_GetFriends_FullMethodName           = "/friends.FriendsService/GetFriends"
+	FriendsService_DeleteFriend_FullMethodName         = "/friends.FriendsService/DeleteFriend"
 )
 
 // FriendsServiceClient is the client API for FriendsService service.
@@ -35,6 +37,7 @@ type FriendsServiceClient interface {
 	AcceptFriendRequest(ctx context.Context, in *AcceptFriendRequestReq, opts ...grpc.CallOption) (*AcceptFriendRequestResp, error)
 	DeclineFriendRequest(ctx context.Context, in *DeclineFriendReq, opts ...grpc.CallOption) (*DeclineFriendResp, error)
 	GetFriends(ctx context.Context, in *GetFriendsReq, opts ...grpc.CallOption) (*GetFriendsResp, error)
+	DeleteFriend(ctx context.Context, in *DeleteFriendReq, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type friendsServiceClient struct {
@@ -95,6 +98,16 @@ func (c *friendsServiceClient) GetFriends(ctx context.Context, in *GetFriendsReq
 	return out, nil
 }
 
+func (c *friendsServiceClient) DeleteFriend(ctx context.Context, in *DeleteFriendReq, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, FriendsService_DeleteFriend_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FriendsServiceServer is the server API for FriendsService service.
 // All implementations must embed UnimplementedFriendsServiceServer
 // for forward compatibility.
@@ -104,6 +117,7 @@ type FriendsServiceServer interface {
 	AcceptFriendRequest(context.Context, *AcceptFriendRequestReq) (*AcceptFriendRequestResp, error)
 	DeclineFriendRequest(context.Context, *DeclineFriendReq) (*DeclineFriendResp, error)
 	GetFriends(context.Context, *GetFriendsReq) (*GetFriendsResp, error)
+	DeleteFriend(context.Context, *DeleteFriendReq) (*emptypb.Empty, error)
 	mustEmbedUnimplementedFriendsServiceServer()
 }
 
@@ -128,6 +142,9 @@ func (UnimplementedFriendsServiceServer) DeclineFriendRequest(context.Context, *
 }
 func (UnimplementedFriendsServiceServer) GetFriends(context.Context, *GetFriendsReq) (*GetFriendsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFriends not implemented")
+}
+func (UnimplementedFriendsServiceServer) DeleteFriend(context.Context, *DeleteFriendReq) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteFriend not implemented")
 }
 func (UnimplementedFriendsServiceServer) mustEmbedUnimplementedFriendsServiceServer() {}
 func (UnimplementedFriendsServiceServer) testEmbeddedByValue()                        {}
@@ -240,6 +257,24 @@ func _FriendsService_GetFriends_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FriendsService_DeleteFriend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFriendReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FriendsServiceServer).DeleteFriend(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FriendsService_DeleteFriend_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FriendsServiceServer).DeleteFriend(ctx, req.(*DeleteFriendReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FriendsService_ServiceDesc is the grpc.ServiceDesc for FriendsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +301,10 @@ var FriendsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFriends",
 			Handler:    _FriendsService_GetFriends_Handler,
+		},
+		{
+			MethodName: "DeleteFriend",
+			Handler:    _FriendsService_DeleteFriend_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

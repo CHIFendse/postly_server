@@ -1,13 +1,14 @@
 syntax = "proto3";
 package friends;
 option go_package = "proto/friends";
-
+import "google/protobuf/empty.proto";
 service FriendsService {
   rpc SendFriendRequest(SendFriendRequestReq)     returns (SendFriendRequestResp);
   rpc GetFriendRequests(GetFriendRequestsReq)     returns (GetFriendRequestsResp);
   rpc AcceptFriendRequest(AcceptFriendRequestReq) returns (AcceptFriendRequestResp);
   rpc DeclineFriendRequest(DeclineFriendReq)      returns (DeclineFriendResp);
   rpc GetFriends(GetFriendsReq)                   returns (GetFriendsResp);
+  rpc DeleteFriend(DeleteFriendReq)               returns (google.protobuf.Empty);
 }
 
 message FriendRequest {
@@ -32,3 +33,5 @@ message DeclineFriendResp { bool ok = 1; }
 
 message GetFriendsReq  { string user_id = 1; }
 message GetFriendsResp { repeated Friend friends = 1; }
+
+message DeleteFriendReq { string user_id1 =1; string user_id2 = 2;}

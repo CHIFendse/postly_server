@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	friendspb "postly/proto/friends"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 const wsPubPrefix = "ws:user:"
@@ -24,6 +25,31 @@ type Friends struct {
 func New(db *sql.DB, cache *redis.Client) *Friends {
 	return &Friends{db: db, cache: cache}
 }
+
+func (s *Friends) DeleteFriend(ctx context.Context, req *friendspb.DeleteFriendReq) (*emptypb.Empty, error) {
+	u1, u2 := req.UserId1, req.UserId2
+	if u1 > u2 {
+		u1, u2 = u2, u1
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM friends
+		WHERE user_id1 = $1 AND user_id2 = $2`, u1, u2)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "связь не найдена")
+	}
+
+	// Уведомляем обоих пользователей об удалении
+	for _, pair := range [][2]string{{req.UserId1, req.UserId2}, {req.UserId2, req.UserId1}} {
+		payload, _ := json.Marshal(map[string]string{
+			"type":      "DELETE_FRIEND",
+			"friend_id": pair[1],
+		})
+		s.cache.Publish(ctx, wsPubPrefix+pair[0], payload)
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
 
 func (s *Friends) SendFriendRequest(ctx context.Context, req *friendspb.SendFriendRequestReq) (*friendspb.SendFriendRequestResp, error) {
 	if req.SenderId == req.ReceiverId {

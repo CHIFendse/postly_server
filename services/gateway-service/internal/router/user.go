@@ -15,6 +15,7 @@ func RegisterUser(mux *http.ServeMux, c *clients.Clients) {
 	mux.HandleFunc("/register", handleRegister(c))
 }
 
+
 func handleRegister(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

@@ -15,6 +15,37 @@ func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
 	mux.HandleFunc("/acceptFriendRequest",  JWTMiddleware(c, handleAcceptFriendRequest(c)))
 	mux.HandleFunc("/declineFriendRequest", JWTMiddleware(c, handleDeclineFriendRequest(c)))
 	mux.HandleFunc("/getFriends",           JWTMiddleware(c, handleGetFriends(c)))
+	mux.HandleFunc("/deleteFriend", 		JWTMiddleware(c, handleDeleteFriend(c)))
+}
+
+func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var data struct {
+			UserId string `json:"user_id"`
+			FriendId string `json:"friend_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		_, err := c.Friends.DeleteFriend(r.Context(), &friendspb.DeleteFriendReq{
+			UserId1: data.UserId,
+			UserId2: data.FriendId,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]string{"success":"error", "message": err.Error()})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"success": "ok"})
+
+	}
 }
 
 func handleSendFriendRequest(c *clients.Clients) http.HandlerFunc {

@@ -9,6 +9,7 @@ package friends
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -597,11 +598,63 @@ func (x *GetFriendsResp) GetFriends() []*Friend {
 	return nil
 }
 
+type DeleteFriendReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId1       string                 `protobuf:"bytes,1,opt,name=user_id1,json=userId1,proto3" json:"user_id1,omitempty"`
+	UserId2       string                 `protobuf:"bytes,2,opt,name=user_id2,json=userId2,proto3" json:"user_id2,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFriendReq) Reset() {
+	*x = DeleteFriendReq{}
+	mi := &file_proto_friends_friends_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFriendReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFriendReq) ProtoMessage() {}
+
+func (x *DeleteFriendReq) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_friends_friends_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFriendReq.ProtoReflect.Descriptor instead.
+func (*DeleteFriendReq) Descriptor() ([]byte, []int) {
+	return file_proto_friends_friends_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DeleteFriendReq) GetUserId1() string {
+	if x != nil {
+		return x.UserId1
+	}
+	return ""
+}
+
+func (x *DeleteFriendReq) GetUserId2() string {
+	if x != nil {
+		return x.UserId2
+	}
+	return ""
+}
+
 var File_proto_friends_friends_proto protoreflect.FileDescriptor
 
 const file_proto_friends_friends_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproto/friends/friends.proto\x12\afriends\"[\n" +
+	"\x1bproto/friends/friends.proto\x12\afriends\x1a\x1bgoogle/protobuf/empty.proto\"[\n" +
 	"\rFriendRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tsender_id\x18\x02 \x01(\tR\bsenderId\x12\x1d\n" +
@@ -637,14 +690,18 @@ const file_proto_friends_friends_proto_rawDesc = "" +
 	"\rGetFriendsReq\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\";\n" +
 	"\x0eGetFriendsResp\x12)\n" +
-	"\afriends\x18\x01 \x03(\v2\x0f.friends.FriendR\afriends2\xa0\x03\n" +
+	"\afriends\x18\x01 \x03(\v2\x0f.friends.FriendR\afriends\"G\n" +
+	"\x0fDeleteFriendReq\x12\x19\n" +
+	"\buser_id1\x18\x01 \x01(\tR\auserId1\x12\x19\n" +
+	"\buser_id2\x18\x02 \x01(\tR\auserId22\xe2\x03\n" +
 	"\x0eFriendsService\x12R\n" +
 	"\x11SendFriendRequest\x12\x1d.friends.SendFriendRequestReq\x1a\x1e.friends.SendFriendRequestResp\x12R\n" +
 	"\x11GetFriendRequests\x12\x1d.friends.GetFriendRequestsReq\x1a\x1e.friends.GetFriendRequestsResp\x12X\n" +
 	"\x13AcceptFriendRequest\x12\x1f.friends.AcceptFriendRequestReq\x1a .friends.AcceptFriendRequestResp\x12M\n" +
 	"\x14DeclineFriendRequest\x12\x19.friends.DeclineFriendReq\x1a\x1a.friends.DeclineFriendResp\x12=\n" +
 	"\n" +
-	"GetFriends\x12\x16.friends.GetFriendsReq\x1a\x17.friends.GetFriendsRespB\x0fZ\rproto/friendsb\x06proto3"
+	"GetFriends\x12\x16.friends.GetFriendsReq\x1a\x17.friends.GetFriendsResp\x12@\n" +
+	"\fDeleteFriend\x12\x18.friends.DeleteFriendReq\x1a\x16.google.protobuf.EmptyB\x0fZ\rproto/friendsb\x06proto3"
 
 var (
 	file_proto_friends_friends_proto_rawDescOnce sync.Once
@@ -658,7 +715,7 @@ func file_proto_friends_friends_proto_rawDescGZIP() []byte {
 	return file_proto_friends_friends_proto_rawDescData
 }
 
-var file_proto_friends_friends_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_proto_friends_friends_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_proto_friends_friends_proto_goTypes = []any{
 	(*FriendRequest)(nil),           // 0: friends.FriendRequest
 	(*Friend)(nil),                  // 1: friends.Friend
@@ -672,6 +729,8 @@ var file_proto_friends_friends_proto_goTypes = []any{
 	(*DeclineFriendResp)(nil),       // 9: friends.DeclineFriendResp
 	(*GetFriendsReq)(nil),           // 10: friends.GetFriendsReq
 	(*GetFriendsResp)(nil),          // 11: friends.GetFriendsResp
+	(*DeleteFriendReq)(nil),         // 12: friends.DeleteFriendReq
+	(*emptypb.Empty)(nil),           // 13: google.protobuf.Empty
 }
 var file_proto_friends_friends_proto_depIdxs = []int32{
 	0,  // 0: friends.GetFriendRequestsResp.requests:type_name -> friends.FriendRequest
@@ -681,13 +740,15 @@ var file_proto_friends_friends_proto_depIdxs = []int32{
 	6,  // 4: friends.FriendsService.AcceptFriendRequest:input_type -> friends.AcceptFriendRequestReq
 	8,  // 5: friends.FriendsService.DeclineFriendRequest:input_type -> friends.DeclineFriendReq
 	10, // 6: friends.FriendsService.GetFriends:input_type -> friends.GetFriendsReq
-	3,  // 7: friends.FriendsService.SendFriendRequest:output_type -> friends.SendFriendRequestResp
-	5,  // 8: friends.FriendsService.GetFriendRequests:output_type -> friends.GetFriendRequestsResp
-	7,  // 9: friends.FriendsService.AcceptFriendRequest:output_type -> friends.AcceptFriendRequestResp
-	9,  // 10: friends.FriendsService.DeclineFriendRequest:output_type -> friends.DeclineFriendResp
-	11, // 11: friends.FriendsService.GetFriends:output_type -> friends.GetFriendsResp
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
+	12, // 7: friends.FriendsService.DeleteFriend:input_type -> friends.DeleteFriendReq
+	3,  // 8: friends.FriendsService.SendFriendRequest:output_type -> friends.SendFriendRequestResp
+	5,  // 9: friends.FriendsService.GetFriendRequests:output_type -> friends.GetFriendRequestsResp
+	7,  // 10: friends.FriendsService.AcceptFriendRequest:output_type -> friends.AcceptFriendRequestResp
+	9,  // 11: friends.FriendsService.DeclineFriendRequest:output_type -> friends.DeclineFriendResp
+	11, // 12: friends.FriendsService.GetFriends:output_type -> friends.GetFriendsResp
+	13, // 13: friends.FriendsService.DeleteFriend:output_type -> google.protobuf.Empty
+	8,  // [8:14] is the sub-list for method output_type
+	2,  // [2:8] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -704,7 +765,7 @@ func file_proto_friends_friends_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_friends_friends_proto_rawDesc), len(file_proto_friends_friends_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
