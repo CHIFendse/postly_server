@@ -51,7 +51,6 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 		defer sub.Close()
 		ch := sub.Channel()
 
-		// Читаем входящие от клиента
 		go func() {
 			for {
 				_, raw, err := conn.ReadMessage()
@@ -63,7 +62,6 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 			}
 		}()
 
-		// Redis → WebSocket клиенту
 		for msg := range ch {
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(msg.Payload)); err != nil {
 				log.Printf("WS write error user %s: %v", userID, err)
@@ -84,7 +82,7 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
-	// TYPING → пересылаем участникам
+	// TYPING
 	if msg["type"] == "TYPING" {
 		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
 		if err != nil {
@@ -104,20 +102,20 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
-	// Call signaling → ретранслируем другим участникам чата
+	// Call signaling — relay to all other participants
 	callTypes := map[string]bool{
 		"CALL_INVITE": true,
 		"CALL_ACCEPT": true,
 		"CALL_REJECT": true,
 		"CALL_HANGUP": true,
-		"CALL_OFFER":  true, // WebRTC SDP offer
-		"CALL_ANSWER": true, // WebRTC SDP answer
-		"CALL_ICE":    true, // WebRTC ICE candidate
+		"CALL_OFFER":  true,
+		"CALL_ANSWER": true,
+		"CALL_ICE":    true,
 	}
 	if callTypes[msg["type"]] {
 		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
 		if err != nil {
-			log.Printf("WS call signal GetParticipants error: %v", err)
+			log.Printf("WS call GetParticipants: %v", err)
 			return
 		}
 		payload, _ := json.Marshal(msg)
@@ -126,7 +124,6 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 				continue
 			}
 			cache.Publish(ctx, "ws:user:"+uid, payload)
-			// CALL_INVITE: дополнительно шлём FCM push (для закрытого приложения)
 			if msg["type"] == "CALL_INVITE" {
 				go sendCallPush(ctx, cache, uid, msg["name"], chatID)
 			}
@@ -134,7 +131,7 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
-	// Текстовое сообщение → messaging-service
+	// Text message
 	text := msg["text"]
 	if text == "" {
 		return
@@ -145,22 +142,17 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		Text:     text,
 	})
 	if err != nil {
-		log.Printf("WS SendMessage error: %v", err)
+		log.Printf("WS SendMessage: %v", err)
 		return
 	}
 
-	// Получаем участников и рассылаем всем (включая отправителя) с username и created_at
 	pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
 	if err != nil {
-		log.Printf("WS GetParticipants error: %v", err)
-		// Fallback: хотя бы вернуть отправителю
+		log.Printf("WS GetParticipants: %v", err)
 		confirm, _ := json.Marshal(map[string]string{
-			"type":      "NEW_MESSAGE",
-			"id":        sendResp.MessageId,
-			"chat_id":   chatID,
-			"sender_id": senderID,
-			"username":  msg["username"],
-			"text":      text,
+			"type": "NEW_MESSAGE", "id": sendResp.MessageId,
+			"chat_id": chatID, "sender_id": senderID,
+			"username": msg["username"], "text": text,
 		})
 		cache.Publish(ctx, "ws:user:"+senderID, confirm)
 		return
@@ -177,7 +169,6 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 	})
 	for _, uid := range pts.UserIds {
 		cache.Publish(ctx, "ws:user:"+uid, payload)
-		// FCM push for recipients who may be offline (app backgrounded/killed)
 		if uid != senderID {
 			go sendMessagePush(ctx, cache, uid, msg["username"], text, chatID)
 		}

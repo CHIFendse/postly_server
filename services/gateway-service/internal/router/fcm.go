@@ -16,15 +16,13 @@ import (
 
 const fcmTokenPrefix = "fcm:user:"
 
-// ── FCM HTTP v1 init ──────────────────────────────────────────────────────────
-// Uses FIREBASE_CREDENTIALS env var — paste the full content of serviceAccountKey.json.
-// Old FCM Legacy API (fcm.googleapis.com/fcm/send with FCM_SERVER_KEY) was
-// shut down by Google on June 20 2024. This uses the current HTTP v1 API.
+// ── FCM HTTP v1 (old legacy API shut down June 2024) ─────────────────────────
+// Set FIREBASE_CREDENTIALS = content of serviceAccountKey.json (minified, one line)
 
 var (
-	fcmProjectID  string
-	fcmGetToken   func(ctx context.Context) (string, error)
-	fcmOnce       sync.Once
+	fcmProjectID string
+	fcmGetToken  func(ctx context.Context) (string, error)
+	fcmOnce      sync.Once
 )
 
 func initFCM() {
@@ -34,8 +32,6 @@ func initFCM() {
 			log.Println("[FCM] FIREBASE_CREDENTIALS not set — push disabled")
 			return
 		}
-
-		// Parse project_id from service account JSON
 		var sa struct {
 			ProjectID string `json:"project_id"`
 		}
@@ -45,7 +41,6 @@ func initFCM() {
 		}
 		fcmProjectID = sa.ProjectID
 
-		// Build OAuth2 token source (cached & auto-refreshed)
 		ts, err := google.CredentialsFromJSON(
 			context.Background(),
 			[]byte(creds),
@@ -55,8 +50,7 @@ func initFCM() {
 			log.Printf("[FCM] credentials error: %v", err)
 			return
 		}
-
-		fcmGetToken = func(ctx context.Context) (string, error) {
+		fcmGetToken = func(_ context.Context) (string, error) {
 			t, err := ts.TokenSource.Token()
 			if err != nil {
 				return "", err
@@ -67,29 +61,21 @@ func initFCM() {
 	})
 }
 
-// send posts one FCM v1 message.
 func fcmSend(ctx context.Context, message map[string]any) {
 	initFCM()
 	if fcmGetToken == nil {
 		return
 	}
-
 	token, err := fcmGetToken(ctx)
 	if err != nil {
 		log.Printf("[FCM] get token: %v", err)
 		return
 	}
-
 	body, _ := json.Marshal(map[string]any{"message": message})
-	url := fmt.Sprintf(
-		"https://fcm.googleapis.com/v1/projects/%s/messages:send",
-		fcmProjectID,
-	)
-
+	url := fmt.Sprintf("https://fcm.googleapis.com/v1/projects/%s/messages:send", fcmProjectID)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("[FCM] send: %v", err)
@@ -97,7 +83,7 @@ func fcmSend(ctx context.Context, message map[string]any) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[FCM] HTTP %d for request to %s", resp.StatusCode, url)
+		log.Printf("[FCM] HTTP %d", resp.StatusCode)
 	}
 }
 
@@ -115,7 +101,6 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 			return
 		}
 		userID, _ := r.Context().Value(UserIDKey).(string)
-
 		var body struct {
 			FCMToken string `json:"fcm_token"`
 		}
@@ -123,7 +108,6 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-
 		cache.Set(r.Context(), fcmTokenPrefix+userID, body.FCMToken, 0)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
@@ -132,8 +116,10 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 
 // ── Push senders ──────────────────────────────────────────────────────────────
 
-// sendCallPush — HIGH-priority notification that wakes the screen.
-// Triggers the full-screen incoming call UI on the device.
+// sendCallPush — DATA-ONLY, HIGH priority.
+// Data-only ensures PostlyMessagingService.onMessageReceived fires even when
+// the app is killed, so we can show a fullScreenIntent call notification.
+// A notification field would cause Android to handle it silently as heads-up.
 func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerName, chatID string) {
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
@@ -141,29 +127,16 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 	}
 	fcmSend(ctx, map[string]any{
 		"token": deviceToken,
-		"notification": map[string]string{
-			"title": "Входящий звонок",
-			"body":  callerName + " звонит вам",
-		},
+		// NO "notification" field — data-only so onMessageReceived always fires
 		"android": map[string]any{
-			"priority": "HIGH",
-			"notification": map[string]any{
-				"channel_id": "postly_calls", // matches client PostlyPlugin channel
-				"sound":      "default",
-				"visibility": "PUBLIC",
-			},
+			"priority": "HIGH", // wakes device from doze
 		},
 		"apns": map[string]any{
 			"headers": map[string]string{"apns-priority": "10"},
 			"payload": map[string]any{
 				"aps": map[string]any{
-					"alert": map[string]string{
-						"title": "Входящий звонок",
-						"body":  callerName + " звонит вам",
-					},
-					"sound":             "default",
-					"category":          "CALL",
 					"content-available": 1,
+					"sound":             "default",
 				},
 			},
 		},
@@ -175,8 +148,9 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 	})
 }
 
-// sendMessagePush — normal-priority notification for a new message.
-// Delivers to background/killed users who missed the WebSocket broadcast.
+// sendMessagePush — notification + data.
+// "notification" field lets Android display it automatically when app is killed.
+// "data" contains enough info for PostlyMessagingService when app is foreground.
 func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, senderName, text, chatID string) {
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
@@ -195,26 +169,24 @@ func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, send
 		"android": map[string]any{
 			"priority": "NORMAL",
 			"notification": map[string]any{
-				"channel_id": "postly_messages", // matches client PostlyPlugin channel
+				"channel_id": "postly_messages",
 				"sound":      "default",
 			},
 		},
 		"apns": map[string]any{
 			"payload": map[string]any{
 				"aps": map[string]any{
-					"alert": map[string]string{
-						"title": senderName,
-						"body":  preview,
-					},
+					"alert": map[string]string{"title": senderName, "body": preview},
 					"sound": "default",
 					"badge": 1,
 				},
 			},
 		},
 		"data": map[string]string{
-			"type":    "NEW_MESSAGE",
-			"chat_id": chatID,
-			"text":    preview,
+			"type":     "NEW_MESSAGE",
+			"chat_id":  chatID,
+			"text":     preview,
+			"username": senderName, // needed by PostlyMessagingService.handleMessage
 		},
 	})
 }
