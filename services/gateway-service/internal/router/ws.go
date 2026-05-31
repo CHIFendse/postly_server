@@ -110,6 +110,9 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		"CALL_ACCEPT": true,
 		"CALL_REJECT": true,
 		"CALL_HANGUP": true,
+		"CALL_OFFER":  true, // WebRTC SDP offer
+		"CALL_ANSWER": true, // WebRTC SDP answer
+		"CALL_ICE":    true, // WebRTC ICE candidate
 	}
 	if callTypes[msg["type"]] {
 		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
@@ -119,8 +122,13 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		}
 		payload, _ := json.Marshal(msg)
 		for _, uid := range pts.UserIds {
-			if uid != senderID {
-				cache.Publish(ctx, "ws:user:"+uid, payload)
+			if uid == senderID {
+				continue
+			}
+			cache.Publish(ctx, "ws:user:"+uid, payload)
+			// CALL_INVITE: дополнительно шлём FCM push (для закрытого приложения)
+			if msg["type"] == "CALL_INVITE" {
+				go sendCallPush(ctx, cache, uid, msg["name"], chatID)
 			}
 		}
 		return

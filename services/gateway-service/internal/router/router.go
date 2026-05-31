@@ -14,4 +14,6 @@ func Setup(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	RegisterMessaging(mux, c)
 	RegisterFriends(mux, c)
 	RegisterWS(mux, c, cache)
+	// FCM-токен для push-уведомлений
+	mux.HandleFunc("/registerFCMToken", JWTMiddleware(c, handleRegisterFCMToken(cache)))
 }
