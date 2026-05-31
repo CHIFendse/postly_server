@@ -177,5 +177,9 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 	})
 	for _, uid := range pts.UserIds {
 		cache.Publish(ctx, "ws:user:"+uid, payload)
+		// FCM push for recipients who may be offline (app backgrounded/killed)
+		if uid != senderID {
+			go sendMessagePush(ctx, cache, uid, msg["username"], text, chatID)
+		}
 	}
 }

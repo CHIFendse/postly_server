@@ -3,7 +3,10 @@ module gateway-service
 go 1.26.2
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
+	github.com/redis/go-redis/v9 v9.20.0
+	golang.org/x/oauth2 v0.36.0
 	google.golang.org/grpc v1.81.1
 	postly/proto v0.0.0
 )
@@ -11,9 +14,8 @@ require (
 replace postly/proto => ../../proto
 
 require (
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/redis/go-redis/v9 v9.20.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
