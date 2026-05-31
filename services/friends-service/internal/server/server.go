@@ -38,7 +38,6 @@ func (s *Friends) DeleteFriend(ctx context.Context, req *friendspb.DeleteFriendR
 		return nil, status.Error(codes.NotFound, "связь не найдена")
 	}
 
-	// Уведомляем обоих пользователей об удалении
 	for _, pair := range [][2]string{{req.UserId1, req.UserId2}, {req.UserId2, req.UserId1}} {
 		payload, _ := json.Marshal(map[string]string{
 			"type":      "DELETE_FRIEND",
