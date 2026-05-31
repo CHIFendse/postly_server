@@ -14,8 +14,10 @@ func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
 	mux.HandleFunc("/getFriendRequests",    JWTMiddleware(c, handleGetFriendRequests(c)))
 	mux.HandleFunc("/acceptFriendRequest",  JWTMiddleware(c, handleAcceptFriendRequest(c)))
 	mux.HandleFunc("/declineFriendRequest", JWTMiddleware(c, handleDeclineFriendRequest(c)))
-	mux.HandleFunc("/getFriends",           JWTMiddleware(c, handleGetFriends(c)))
-	mux.HandleFunc("/deleteFriend", 		JWTMiddleware(c, handleDeleteFriend(c)))
+	mux.HandleFunc("/getFriends",            JWTMiddleware(c, handleGetFriends(c)))
+	mux.HandleFunc("/deleteFriend",          JWTMiddleware(c, handleDeleteFriend(c)))
+	mux.HandleFunc("/cancelFriendRequest",   JWTMiddleware(c, handleCancelFriendRequest(c)))
+	mux.HandleFunc("/getSentRequests",       JWTMiddleware(c, handleGetSentRequests(c)))
 }
 
 func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
@@ -211,6 +213,74 @@ func handleGetFriends(c *clients.Clients) http.HandlerFunc {
 				username = u.Username
 			}
 			out = append(out, friendOut{Id: f.UserId, Username: username})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	}
+}
+
+func handleCancelFriendRequest(c *clients.Clients) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.Context().Value(UserIDKey).(string)
+
+		var data struct {
+			RequestID string `json:"request_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		_, err := c.Friends.CancelFriendRequest(r.Context(), &friendspb.DeclineFriendReq{
+			UserId:    userID,
+			RequestId: data.RequestID,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Заявка не найдена"})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	}
+}
+
+func handleGetSentRequests(c *clients.Clients) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.Context().Value(UserIDKey).(string)
+
+		resp, err := c.Friends.GetSentRequests(r.Context(), &friendspb.GetFriendRequestsReq{UserId: userID})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения заявок"})
+			return
+		}
+
+		type reqOut struct {
+			Id         string `json:"id"`
+			ReceiverId string `json:"receiver_id"`
+			Username   string `json:"username"`
+			CreatedAt  int64  `json:"created_at"`
+		}
+		out := make([]reqOut, 0, len(resp.Requests))
+		for _, req := range resp.Requests {
+			// SenderId содержит receiver_id (см. GetSentRequests в friends-service)
+			username := req.SenderId
+			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: req.SenderId}); err == nil {
+				username = u.Username
+			}
+			out = append(out, reqOut{
+				Id:         req.Id,
+				ReceiverId: req.SenderId,
+				Username:   username,
+				CreatedAt:  req.CreatedAt,
+			})
 		}
 
 		w.Header().Set("Content-Type", "application/json")

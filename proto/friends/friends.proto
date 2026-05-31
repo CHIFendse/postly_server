@@ -7,6 +7,8 @@ service FriendsService {
   rpc GetFriendRequests(GetFriendRequestsReq)     returns (GetFriendRequestsResp);
   rpc AcceptFriendRequest(AcceptFriendRequestReq) returns (AcceptFriendRequestResp);
   rpc DeclineFriendRequest(DeclineFriendReq)      returns (DeclineFriendResp);
+  rpc CancelFriendRequest(DeclineFriendReq)       returns (DeclineFriendResp);
+  rpc GetSentRequests(GetFriendRequestsReq)       returns (GetFriendRequestsResp);
   rpc GetFriends(GetFriendsReq)                   returns (GetFriendsResp);
   rpc DeleteFriend(DeleteFriendReq)               returns (google.protobuf.Empty);
 }

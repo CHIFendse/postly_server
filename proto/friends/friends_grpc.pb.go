@@ -24,6 +24,8 @@ const (
 	FriendsService_GetFriendRequests_FullMethodName    = "/friends.FriendsService/GetFriendRequests"
 	FriendsService_AcceptFriendRequest_FullMethodName  = "/friends.FriendsService/AcceptFriendRequest"
 	FriendsService_DeclineFriendRequest_FullMethodName = "/friends.FriendsService/DeclineFriendRequest"
+	FriendsService_CancelFriendRequest_FullMethodName  = "/friends.FriendsService/CancelFriendRequest"
+	FriendsService_GetSentRequests_FullMethodName      = "/friends.FriendsService/GetSentRequests"
 	FriendsService_GetFriends_FullMethodName           = "/friends.FriendsService/GetFriends"
 	FriendsService_DeleteFriend_FullMethodName         = "/friends.FriendsService/DeleteFriend"
 )
@@ -36,6 +38,8 @@ type FriendsServiceClient interface {
 	GetFriendRequests(ctx context.Context, in *GetFriendRequestsReq, opts ...grpc.CallOption) (*GetFriendRequestsResp, error)
 	AcceptFriendRequest(ctx context.Context, in *AcceptFriendRequestReq, opts ...grpc.CallOption) (*AcceptFriendRequestResp, error)
 	DeclineFriendRequest(ctx context.Context, in *DeclineFriendReq, opts ...grpc.CallOption) (*DeclineFriendResp, error)
+	CancelFriendRequest(ctx context.Context, in *DeclineFriendReq, opts ...grpc.CallOption) (*DeclineFriendResp, error)
+	GetSentRequests(ctx context.Context, in *GetFriendRequestsReq, opts ...grpc.CallOption) (*GetFriendRequestsResp, error)
 	GetFriends(ctx context.Context, in *GetFriendsReq, opts ...grpc.CallOption) (*GetFriendsResp, error)
 	DeleteFriend(ctx context.Context, in *DeleteFriendReq, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -88,6 +92,26 @@ func (c *friendsServiceClient) DeclineFriendRequest(ctx context.Context, in *Dec
 	return out, nil
 }
 
+func (c *friendsServiceClient) CancelFriendRequest(ctx context.Context, in *DeclineFriendReq, opts ...grpc.CallOption) (*DeclineFriendResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeclineFriendResp)
+	err := c.cc.Invoke(ctx, FriendsService_CancelFriendRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *friendsServiceClient) GetSentRequests(ctx context.Context, in *GetFriendRequestsReq, opts ...grpc.CallOption) (*GetFriendRequestsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFriendRequestsResp)
+	err := c.cc.Invoke(ctx, FriendsService_GetSentRequests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *friendsServiceClient) GetFriends(ctx context.Context, in *GetFriendsReq, opts ...grpc.CallOption) (*GetFriendsResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetFriendsResp)
@@ -116,6 +140,8 @@ type FriendsServiceServer interface {
 	GetFriendRequests(context.Context, *GetFriendRequestsReq) (*GetFriendRequestsResp, error)
 	AcceptFriendRequest(context.Context, *AcceptFriendRequestReq) (*AcceptFriendRequestResp, error)
 	DeclineFriendRequest(context.Context, *DeclineFriendReq) (*DeclineFriendResp, error)
+	CancelFriendRequest(context.Context, *DeclineFriendReq) (*DeclineFriendResp, error)
+	GetSentRequests(context.Context, *GetFriendRequestsReq) (*GetFriendRequestsResp, error)
 	GetFriends(context.Context, *GetFriendsReq) (*GetFriendsResp, error)
 	DeleteFriend(context.Context, *DeleteFriendReq) (*emptypb.Empty, error)
 	mustEmbedUnimplementedFriendsServiceServer()
@@ -139,6 +165,12 @@ func (UnimplementedFriendsServiceServer) AcceptFriendRequest(context.Context, *A
 }
 func (UnimplementedFriendsServiceServer) DeclineFriendRequest(context.Context, *DeclineFriendReq) (*DeclineFriendResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeclineFriendRequest not implemented")
+}
+func (UnimplementedFriendsServiceServer) CancelFriendRequest(context.Context, *DeclineFriendReq) (*DeclineFriendResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelFriendRequest not implemented")
+}
+func (UnimplementedFriendsServiceServer) GetSentRequests(context.Context, *GetFriendRequestsReq) (*GetFriendRequestsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSentRequests not implemented")
 }
 func (UnimplementedFriendsServiceServer) GetFriends(context.Context, *GetFriendsReq) (*GetFriendsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFriends not implemented")
@@ -239,6 +271,42 @@ func _FriendsService_DeclineFriendRequest_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FriendsService_CancelFriendRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeclineFriendReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FriendsServiceServer).CancelFriendRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FriendsService_CancelFriendRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FriendsServiceServer).CancelFriendRequest(ctx, req.(*DeclineFriendReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FriendsService_GetSentRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFriendRequestsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FriendsServiceServer).GetSentRequests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FriendsService_GetSentRequests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FriendsServiceServer).GetSentRequests(ctx, req.(*GetFriendRequestsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _FriendsService_GetFriends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetFriendsReq)
 	if err := dec(in); err != nil {
@@ -297,6 +365,14 @@ var FriendsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeclineFriendRequest",
 			Handler:    _FriendsService_DeclineFriendRequest_Handler,
+		},
+		{
+			MethodName: "CancelFriendRequest",
+			Handler:    _FriendsService_CancelFriendRequest_Handler,
+		},
+		{
+			MethodName: "GetSentRequests",
+			Handler:    _FriendsService_GetSentRequests_Handler,
 		},
 		{
 			MethodName: "GetFriends",

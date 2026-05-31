@@ -143,12 +143,14 @@ func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.Accept
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// Уведомляем отправителя что заявка принята
-	payload, _ := json.Marshal(map[string]string{
-		"type":        "FRIEND_ACCEPTED",
-		"receiver_id": req.UserId,
-	})
-	s.cache.Publish(ctx, wsPubPrefix+senderID, payload)
+	// Уведомляем обе стороны: отправителя и принявшего
+	for _, pair := range [][2]string{{senderID, req.UserId}, {req.UserId, senderID}} {
+		payload, _ := json.Marshal(map[string]string{
+			"type":       "FRIEND_ACCEPTED",
+			"friend_id":  pair[1], // ID нового друга для каждой стороны
+		})
+		s.cache.Publish(ctx, wsPubPrefix+pair[0], payload)
+	}
 
 	return &friendspb.AcceptFriendRequestResp{SenderId: senderID}, nil
 }
@@ -166,6 +168,44 @@ func (s *Friends) DeclineFriendRequest(ctx context.Context, req *friendspb.Decli
 		return nil, status.Error(codes.NotFound, fmt.Sprintf("заявка не найдена"))
 	}
 	return &friendspb.DeclineFriendResp{Ok: true}, nil
+}
+
+func (s *Friends) CancelFriendRequest(ctx context.Context, req *friendspb.DeclineFriendReq) (*friendspb.DeclineFriendResp, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM friend_requests
+		 WHERE id=$1 AND sender_id=$2 AND status='pending'`,
+		req.RequestId, req.UserId,
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, status.Error(codes.NotFound, "заявка не найдена")
+	}
+	return &friendspb.DeclineFriendResp{Ok: true}, nil
+}
+
+func (s *Friends) GetSentRequests(ctx context.Context, req *friendspb.GetFriendRequestsReq) (*friendspb.GetFriendRequestsResp, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, receiver_id, EXTRACT(EPOCH FROM created_at)::INT
+		FROM friend_requests
+		WHERE sender_id = $1 AND status = 'pending'
+		ORDER BY created_at DESC`, req.UserId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer rows.Close()
+
+	resp := &friendspb.GetFriendRequestsResp{}
+	for rows.Next() {
+		r := &friendspb.FriendRequest{}
+		// receiver_id записываем в поле SenderId чтобы не менять proto
+		if err := rows.Scan(&r.Id, &r.SenderId, &r.CreatedAt); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		resp.Requests = append(resp.Requests, r)
+	}
+	return resp, nil
 }
 
 func (s *Friends) GetFriends(ctx context.Context, req *friendspb.GetFriendsReq) (*friendspb.GetFriendsResp, error) {

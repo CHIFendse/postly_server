@@ -104,6 +104,28 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
+	// Call signaling → ретранслируем другим участникам чата
+	callTypes := map[string]bool{
+		"CALL_INVITE": true,
+		"CALL_ACCEPT": true,
+		"CALL_REJECT": true,
+		"CALL_HANGUP": true,
+	}
+	if callTypes[msg["type"]] {
+		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
+		if err != nil {
+			log.Printf("WS call signal GetParticipants error: %v", err)
+			return
+		}
+		payload, _ := json.Marshal(msg)
+		for _, uid := range pts.UserIds {
+			if uid != senderID {
+				cache.Publish(ctx, "ws:user:"+uid, payload)
+			}
+		}
+		return
+	}
+
 	// Текстовое сообщение → messaging-service
 	text := msg["text"]
 	if text == "" {
