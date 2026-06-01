@@ -148,12 +148,10 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 	})
 }
 
-// sendMessagePush — DATA-ONLY, HIGH priority.
-// Data-only ensures PostlyMessagingService.onMessageReceived fires in all app states
-// so we can show a proper notification with sound + vibration (IMPORTANCE_HIGH channel).
-// A "notification" field would bypass onMessageReceived when app is in background,
-// relying on the Firebase SDK default display which often silences on first install
-// (channel not yet created) and doesn't call our custom handler.
+// sendMessagePush — notification + data, HIGH priority.
+// "notification" field makes Android show the message natively (guaranteed on all
+// manufacturers). "data" field is included so onMessageReceived still fires in
+// foreground, allowing the app to suppress the duplicate when the chat is open.
 func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, senderName, text, chatID string) {
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
@@ -165,9 +163,21 @@ func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, send
 	}
 	fcmSend(ctx, map[string]any{
 		"token": deviceToken,
-		// NO "notification" field — data-only so onMessageReceived always fires
+		// notification field → Android shows it natively even if app is killed.
+		// channel_id must match a channel created by the app.
+		"notification": map[string]string{
+			"title": senderName,
+			"body":  preview,
+		},
 		"android": map[string]any{
-			"priority": "HIGH", // wake device from doze for real-time delivery
+			"priority": "HIGH",
+			"notification": map[string]any{
+				"channel_id":              "postly_messages_v2",
+				"sound":                   "default",
+				"default_vibrate_timings": true,
+				"notification_priority":   "PRIORITY_MAX",
+				"visibility":              "PUBLIC",
+			},
 		},
 		"apns": map[string]any{
 			"headers": map[string]string{"apns-priority": "10"},
@@ -176,7 +186,6 @@ func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, send
 					"alert": map[string]string{"title": senderName, "body": preview},
 					"sound": "default",
 					"badge": 1,
-					"content-available": 1,
 				},
 			},
 		},
