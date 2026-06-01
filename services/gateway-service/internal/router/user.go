@@ -59,9 +59,12 @@ func handleRegister(c *clients.Clients) http.HandlerFunc {
 		})
 		if err != nil {
 			log.Printf("auth.SetCredentials error: %v", err)
+			if _, delErr := c.User.DeleteUser(r.Context(), &userpb.DeleteUserRequest{UserId: userResp.UserId}); delErr != nil {
+				log.Printf("cleanup DeleteUser error: %v", delErr)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка сохранения пароля"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка регистрации. Попробуйте снова."})
 			return
 		}
 

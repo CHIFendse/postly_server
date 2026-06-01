@@ -34,6 +34,14 @@ func (u *User) Register(ctx context.Context, req *userpb.RegisterRequest) (*user
 }
 
 
+func (u *User) DeleteUser(ctx context.Context, req *userpb.DeleteUserRequest) (*userpb.DeleteUserResponse, error) {
+	_, err := u.db.ExecContext(ctx, `DELETE FROM users WHERE user_id = $1`, req.UserId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "db error")
+	}
+	return &userpb.DeleteUserResponse{Ok: true}, nil
+}
+
 func (u *User) GetUserByUsername(ctx context.Context, req *userpb.GetUserByUsernameRequest) (*userpb.GetUserByUsernameResponse, error) {
 	var id string
 	err := u.db.QueryRowContext(ctx,

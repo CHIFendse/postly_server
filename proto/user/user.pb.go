@@ -309,6 +309,94 @@ func (x *RegisterResponse) GetUserId() string {
 	return ""
 }
 
+type DeleteUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserRequest) Reset() {
+	*x = DeleteUserRequest{}
+	mi := &file_proto_user_user_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserRequest) ProtoMessage() {}
+
+func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_user_user_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserRequest.ProtoReflect.Descriptor instead.
+func (*DeleteUserRequest) Descriptor() ([]byte, []int) {
+	return file_proto_user_user_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeleteUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type DeleteUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserResponse) Reset() {
+	*x = DeleteUserResponse{}
+	mi := &file_proto_user_user_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserResponse) ProtoMessage() {}
+
+func (x *DeleteUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_user_user_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserResponse.ProtoReflect.Descriptor instead.
+func (*DeleteUserResponse) Descriptor() ([]byte, []int) {
+	return file_proto_user_user_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DeleteUserResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
 var File_proto_user_user_proto protoreflect.FileDescriptor
 
 const file_proto_user_user_proto_rawDesc = "" +
@@ -328,9 +416,15 @@ const file_proto_user_user_proto_rawDesc = "" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x14\n" +
 	"\x05phone\x18\x03 \x01(\tR\x05phone\"+\n" +
 	"\x10RegisterResponse\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId2\xee\x01\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\",\n" +
+	"\x11DeleteUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"$\n" +
+	"\x12DeleteUserResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2\xaf\x02\n" +
 	"\vUserService\x129\n" +
-	"\bRegister\x12\x15.user.RegisterRequest\x1a\x16.user.RegisterResponse\x12T\n" +
+	"\bRegister\x12\x15.user.RegisterRequest\x1a\x16.user.RegisterResponse\x12?\n" +
+	"\n" +
+	"DeleteUser\x12\x17.user.DeleteUserRequest\x1a\x18.user.DeleteUserResponse\x12T\n" +
 	"\x11GetUserByUsername\x12\x1e.user.GetUserByUsernameRequest\x1a\x1f.user.GetUserByUsernameResponse\x12N\n" +
 	"\x0fGetUserByUserId\x12\x1c.user.GetUserByUserIdRequest\x1a\x1d.user.GetUserByUserIdResponseB\fZ\n" +
 	"proto/userb\x06proto3"
@@ -347,7 +441,7 @@ func file_proto_user_user_proto_rawDescGZIP() []byte {
 	return file_proto_user_user_proto_rawDescData
 }
 
-var file_proto_user_user_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_user_user_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_proto_user_user_proto_goTypes = []any{
 	(*GetUserByUsernameRequest)(nil),  // 0: user.GetUserByUsernameRequest
 	(*GetUserByUsernameResponse)(nil), // 1: user.GetUserByUsernameResponse
@@ -355,16 +449,20 @@ var file_proto_user_user_proto_goTypes = []any{
 	(*GetUserByUserIdResponse)(nil),   // 3: user.GetUserByUserIdResponse
 	(*RegisterRequest)(nil),           // 4: user.RegisterRequest
 	(*RegisterResponse)(nil),          // 5: user.RegisterResponse
+	(*DeleteUserRequest)(nil),         // 6: user.DeleteUserRequest
+	(*DeleteUserResponse)(nil),        // 7: user.DeleteUserResponse
 }
 var file_proto_user_user_proto_depIdxs = []int32{
 	4, // 0: user.UserService.Register:input_type -> user.RegisterRequest
-	0, // 1: user.UserService.GetUserByUsername:input_type -> user.GetUserByUsernameRequest
-	2, // 2: user.UserService.GetUserByUserId:input_type -> user.GetUserByUserIdRequest
-	5, // 3: user.UserService.Register:output_type -> user.RegisterResponse
-	1, // 4: user.UserService.GetUserByUsername:output_type -> user.GetUserByUsernameResponse
-	3, // 5: user.UserService.GetUserByUserId:output_type -> user.GetUserByUserIdResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
+	6, // 1: user.UserService.DeleteUser:input_type -> user.DeleteUserRequest
+	0, // 2: user.UserService.GetUserByUsername:input_type -> user.GetUserByUsernameRequest
+	2, // 3: user.UserService.GetUserByUserId:input_type -> user.GetUserByUserIdRequest
+	5, // 4: user.UserService.Register:output_type -> user.RegisterResponse
+	7, // 5: user.UserService.DeleteUser:output_type -> user.DeleteUserResponse
+	1, // 6: user.UserService.GetUserByUsername:output_type -> user.GetUserByUsernameResponse
+	3, // 7: user.UserService.GetUserByUserId:output_type -> user.GetUserByUserIdResponse
+	4, // [4:8] is the sub-list for method output_type
+	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -381,7 +479,7 @@ func file_proto_user_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_user_user_proto_rawDesc), len(file_proto_user_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
