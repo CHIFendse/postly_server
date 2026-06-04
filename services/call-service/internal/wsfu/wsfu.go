@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"os"
+	"strconv"
 	"sync"
 
 	"github.com/pion/rtp"
@@ -35,11 +37,39 @@ func New(rdb *redis.Client) *SFU {
 	if err := m.RegisterDefaultCodecs(); err != nil {
 		log.Fatalf("[SFU] RegisterDefaultCodecs: %v", err)
 	}
+
+	// Bind ICE to a fixed UDP port range so Docker can expose it.
+	// Set WEBRTC_UDP_MIN / WEBRTC_UDP_MAX in the container env (default 10000-10100).
+	// Set WEBRTC_PUBLIC_IP to the server's public IP so ICE host candidates are reachable.
+	se := webrtc.SettingEngine{}
+
+	minPort := envUint16("WEBRTC_UDP_MIN", 10000)
+	maxPort := envUint16("WEBRTC_UDP_MAX", 10100)
+	if err := se.SetEphemeralUDPPortRange(minPort, maxPort); err != nil {
+		log.Fatalf("[SFU] SetEphemeralUDPPortRange: %v", err)
+	}
+
+	if publicIP := os.Getenv("WEBRTC_PUBLIC_IP"); publicIP != "" {
+		se.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
+		log.Printf("[SFU] NAT1To1IP=%s ports=%d-%d", publicIP, minPort, maxPort)
+	} else {
+		log.Printf("[SFU] WEBRTC_PUBLIC_IP not set — using STUN reflexive candidates (ports %d-%d)", minPort, maxPort)
+	}
+
 	return &SFU{
 		rooms: make(map[string]map[string]*peer),
-		api:   webrtc.NewAPI(webrtc.WithMediaEngine(m)),
+		api:   webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(se)),
 		rdb:   rdb,
 	}
+}
+
+func envUint16(key string, fallback uint16) uint16 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 16); err == nil {
+			return uint16(n)
+		}
+	}
+	return fallback
 }
 
 // Run subscribes to Redis "callsfu:signal" and processes WebRTC signaling forever.

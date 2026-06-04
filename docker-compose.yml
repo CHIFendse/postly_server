@@ -101,7 +101,8 @@ services:
     restart: unless-stopped
     env_file: ./services/call-service/.env
     ports:
-      - "8082:8082/udp"   # DTLS — клиенты подключаются напрямую
+      - "8082:8082/udp"         # DTLS — legacy Go-desktop клиент
+      - "10000-10100:10000-10100/udp"  # WebRTC ICE (pion ephemeral UDP range)
     networks:
       - internal
 
