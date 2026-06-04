@@ -26,8 +26,8 @@ func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		userID := r.Context().Value(UserIDKey).(string)
 		var data struct {
-			UserId string `json:"user_id"`
 			FriendId string `json:"friend_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -35,7 +35,7 @@ func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 		_, err := c.Friends.DeleteFriend(r.Context(), &friendspb.DeleteFriendReq{
-			UserId1: data.UserId,
+			UserId1: userID,
 			UserId2: data.FriendId,
 		})
 		if err != nil {

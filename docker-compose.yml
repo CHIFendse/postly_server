@@ -85,17 +85,6 @@ services:
     networks:
       - internal
 
-  realtime-service:
-    build: ./services/realtime-service
-    restart: unless-stopped
-    env_file: ./services/realtime-service/.env
-    expose:
-      - "50056"
-    depends_on:
-      - redis
-    networks:
-      - internal
-
   call-service:
     build: ./services/call-service
     restart: unless-stopped
@@ -120,7 +109,7 @@ services:
       - chat-service
       - messaging-service
       - friends-service
-      - realtime-service
+      - call-service
     networks:
       - internal
 

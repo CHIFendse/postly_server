@@ -114,7 +114,7 @@ func (s *Messaging) DeleteMessage(ctx context.Context, req *msgpb.DeleteMessageR
 		SenderId: lastSender,
 	})
 
-	go s.notifyDeleteMessage(chatID, req.MessageId)
+	go s.notifyDeleteMessage(chatID, req.MessageId, lastText, lastSender)
 
 	return &msgpb.DeleteMessageResponse{ChatId: chatID}, nil
 }
@@ -132,16 +132,18 @@ func (s *Messaging) DeleteChatMessages(ctx context.Context, req *msgpb.DeleteCha
 
 // ─── Redis pub/sub broadcast ──────────────────────────────────────────────────
 
-func (s *Messaging) notifyDeleteMessage(chatID, msgID string) {
+func (s *Messaging) notifyDeleteMessage(chatID, msgID, lastMessage, lastSenderID string) {
 	ctx := context.Background()
 	resp, err := s.chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
 	if err != nil {
 		return
 	}
 	payload, _ := json.Marshal(map[string]string{
-		"type":       "DELETE_MESSAGE",
-		"chat_id":    chatID,
-		"message_id": msgID,
+		"type":         "DELETE_MESSAGE",
+		"chat_id":      chatID,
+		"message_id":   msgID,
+		"last_message": lastMessage,
+		"sender_id":    lastSenderID,
 	})
 	for _, uid := range resp.UserIds {
 		s.cache.Publish(ctx, wsPubPrefix+uid, payload)
