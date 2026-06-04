@@ -105,6 +105,7 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 	// WebRTC signaling → SFU (not relayed to the other client directly).
 	// The SFU creates a peer connection per client and forwards audio between them.
 	if msg["type"] == "CALL_OFFER" || msg["type"] == "CALL_ICE" {
+		log.Printf("[GW] routing %s user=%s chat=%s", msg["type"], senderID, chatID)
 		sfuPayload, _ := json.Marshal(map[string]string{
 			"type":      msg["type"],
 			"chat_id":   chatID,
@@ -112,9 +113,13 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 			"sdp":       msg["sdp"],
 			"candidate": msg["candidate"],
 		})
-		cache.Publish(ctx, "callsfu:signal", string(sfuPayload))
+		if err := cache.Publish(ctx, "callsfu:signal", string(sfuPayload)).Err(); err != nil {
+			log.Printf("[GW] Redis publish error: %v", err)
+		}
 		return
 	}
+
+	log.Printf("[GW] msg type=%s user=%s chat=%s", msg["type"], senderID, chatID)
 
 	// Call control — relay to all other participants
 	callTypes := map[string]bool{

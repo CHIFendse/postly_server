@@ -45,8 +45,11 @@ func main() {
 		Password: getenv("REDIS_PASSWORD", ""),
 	})
 	sfuCtx := context.Background()
+	log.Println("[SFU] initializing...")
 	wSFU := wsfu.New(rdb)
+	log.Println("[SFU] starting goroutine...")
 	go wSFU.Run(sfuCtx)
+	log.Println("[SFU] goroutine launched")
 
 	// ── Legacy DTLS SFU (Go desktop client) ──────────────────────────────────
 	rooms := udp.NewRoomManager()
