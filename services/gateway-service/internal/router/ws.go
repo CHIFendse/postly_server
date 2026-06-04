@@ -74,8 +74,10 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceClient, chatSvc chatpb.ChatServiceClient, cache *redis.Client) {
 	var msg map[string]string
 	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("[GW] parse error from %s: %v — raw: %.100s", senderID, err, string(raw))
 		return
 	}
+	log.Printf("[GW] recv type=%s chat=%s from=%s", msg["type"], msg["chat_id"], senderID)
 	ctx := context.Background()
 	chatID := msg["chat_id"]
 	if chatID == "" {
