@@ -193,14 +193,20 @@ func (s *SFU) handleICE(chatID, userID, candidateJSON string) {
 func (s *SFU) forwardRTP(chatID, senderID string, pkt *rtp.Packet) {
 	s.mu.RLock()
 	room := s.rooms[chatID]
-	s.mu.RUnlock()
+	// Collect target peers under the lock to avoid concurrent map read/write races
+	// that occur when removePeer modifies the map while we iterate.
+	targets := make([]*peer, 0, len(room))
 	for uid, p := range room {
-		if uid == senderID {
-			continue
+		if uid != senderID {
+			targets = append(targets, p)
 		}
+	}
+	s.mu.RUnlock()
+
+	for _, p := range targets {
 		out := *pkt // shallow copy so SSRC rewrite per-binding doesn't race
 		if err := p.sendTrack.WriteRTP(&out); err != nil {
-			log.Printf("[SFU] forward→%s: %v", uid, err)
+			log.Printf("[SFU] forward→%s: %v", p.userID, err)
 		}
 	}
 }
