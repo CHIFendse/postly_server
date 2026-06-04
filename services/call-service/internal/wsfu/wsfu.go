@@ -184,14 +184,6 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 	delete(s.pendingICE, peerKey)
 	s.mu.Unlock()
 
-	// Apply buffered ICE candidates (remote desc is set ✓, ICE agent not yet started).
-	// pion queues these internally until SetLocalDescription starts the ICE agent.
-	for _, cand := range buffered {
-		if err := pc.AddICECandidate(cand); err != nil {
-			log.Printf("[SFU] AddICECandidate (buffered) user=%s: %v", userID, err)
-		}
-	}
-
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
 		log.Printf("[SFU] CreateAnswer: %v", err)
@@ -204,6 +196,15 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 		pc.Close()
 		s.removePeer(chatID, userID)
 		return
+	}
+
+	// Apply buffered ICE candidates AFTER SetLocalDescription — pion's ICE agent
+	// starts only when SetLocalDescription is called (gatherer leaves "New" state).
+	// Candidates added before that are silently ignored by pion.
+	for _, cand := range buffered {
+		if err := pc.AddICECandidate(cand); err != nil {
+			log.Printf("[SFU] AddICECandidate (buffered) user=%s: %v", userID, err)
+		}
 	}
 
 	// Send the answer (trickle ICE: SFU candidates follow via OnICECandidate).
