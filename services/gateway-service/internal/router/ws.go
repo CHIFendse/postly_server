@@ -102,15 +102,26 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		return
 	}
 
-	// Call signaling — relay to all other participants
+	// WebRTC signaling → SFU (not relayed to the other client directly).
+	// The SFU creates a peer connection per client and forwards audio between them.
+	if msg["type"] == "CALL_OFFER" || msg["type"] == "CALL_ICE" {
+		sfuPayload, _ := json.Marshal(map[string]string{
+			"type":      msg["type"],
+			"chat_id":   chatID,
+			"user_id":   senderID,
+			"sdp":       msg["sdp"],
+			"candidate": msg["candidate"],
+		})
+		cache.Publish(ctx, "callsfu:signal", string(sfuPayload))
+		return
+	}
+
+	// Call control — relay to all other participants
 	callTypes := map[string]bool{
 		"CALL_INVITE": true,
 		"CALL_ACCEPT": true,
 		"CALL_REJECT": true,
 		"CALL_HANGUP": true,
-		"CALL_OFFER":  true,
-		"CALL_ANSWER": true,
-		"CALL_ICE":    true,
 	}
 	if callTypes[msg["type"]] {
 		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})

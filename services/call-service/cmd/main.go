@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
@@ -11,13 +12,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	dtls "github.com/pion/dtls/v2"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/time/rate"
 
 	"call-service/internal/sfu"
 	"call-service/internal/udp"
+	"call-service/internal/wsfu"
 )
 
 var (
@@ -35,6 +39,16 @@ func main() {
 		log.Fatal("cannot load .env")
 	}
 
+	// ── WebRTC SFU (browser clients) ─────────────────────────────────────────
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     getenv("REDIS_ADDR", "localhost:6379"),
+		Password: getenv("REDIS_PASSWORD", ""),
+	})
+	sfuCtx := context.Background()
+	wSFU := wsfu.New(rdb)
+	go wSFU.Run(sfuCtx)
+
+	// ── Legacy DTLS SFU (Go desktop client) ──────────────────────────────────
 	rooms := udp.NewRoomManager()
 
 	go func() {
