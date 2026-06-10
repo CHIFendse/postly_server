@@ -1,0 +1,28 @@
+ARG SERVICE
+
+# ── Build stage ──────────────────────────────────────────────────────────────
+FROM golang:1.23-alpine AS builder
+ARG SERVICE
+WORKDIR /app
+
+# Shared proto (all services: replace postly/proto => ../../proto)
+COPY proto/ proto/
+
+# Service source
+COPY services/${SERVICE}/ services/${SERVICE}/
+
+WORKDIR /app/services/${SERVICE}
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /service ./cmd
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+FROM alpine:3.20
+RUN apk --no-cache add ca-certificates tzdata
+WORKDIR /app
+COPY --from=builder /service ./service
+
+# godotenv.Load() requires .env to exist in CWD.
+# Env vars come from docker-compose env_file — this file is intentionally empty.
+RUN touch .env
+
+CMD ["./service"]

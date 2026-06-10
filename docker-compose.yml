@@ -30,7 +30,11 @@ services:
   # ── Микросервисы (без доступа из интернета) ──────────────────────────────────
 
   auth-service:
-    build: ./services/auth-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: auth-service
     restart: unless-stopped
     env_file: ./services/auth-service/cmd/.env
     expose:
@@ -42,7 +46,11 @@ services:
       - internal
 
   user-service:
-    build: ./services/user-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: user-service
     restart: unless-stopped
     env_file: ./services/user-service/cmd/.env
     expose:
@@ -53,7 +61,11 @@ services:
       - internal
 
   chat-service:
-    build: ./services/chat-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: chat-service
     restart: unless-stopped
     env_file: ./services/chat-service/cmd/.env
     expose:
@@ -64,7 +76,11 @@ services:
       - internal
 
   messaging-service:
-    build: ./services/messaging-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: messaging-service
     restart: unless-stopped
     env_file: ./services/messaging-service/cmd/.env
     expose:
@@ -75,7 +91,11 @@ services:
       - internal
 
   friends-service:
-    build: ./services/friends-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: friends-service
     restart: unless-stopped
     env_file: ./services/friends-service/cmd/.env
     expose:
@@ -86,9 +106,15 @@ services:
       - internal
 
   call-service:
-    build: ./services/call-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: call-service
     restart: unless-stopped
     env_file: ./services/call-service/cmd/.env
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro   # TLS certs for DTLS
     ports:
       - "8082:8082/udp"                    # DTLS — desktop клиент
       - "10000-10200:10000-10200/udp"      # WebRTC ICE (pion ephemeral UDP)
@@ -110,7 +136,11 @@ services:
   # ── Gateway — единственная точка входа из интернета ──────────────────────────
 
   gateway:
-    build: ./services/gateway-service
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: gateway-service
     restart: unless-stopped
     env_file: ./services/gateway-service/cmd/.env
     ports:
