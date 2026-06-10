@@ -90,8 +90,20 @@ services:
     restart: unless-stopped
     env_file: ./services/call-service/.env
     ports:
-      - "8082:8082/udp"         # DTLS — legacy Go-desktop клиент
-      - "10000-10100:10000-10100/udp"  # WebRTC ICE (pion ephemeral UDP range)
+      - "8082:8082/udp"                    # DTLS — desktop клиент
+      - "10000-10200:10000-10200/udp"      # WebRTC ICE (pion ephemeral UDP)
+    networks:
+      - internal
+
+  coturn:
+    image: coturn/coturn:4
+    restart: unless-stopped
+    ports:
+      - "3478:3478/udp"                    # TURN allocation
+      - "3478:3478/tcp"                    # TURN over TCP (fallback)
+      - "49152-49250:49152-49250/udp"      # TURN relay data
+    volumes:
+      - ./coturn.conf:/etc/turnserver.conf:ro
     networks:
       - internal
 
