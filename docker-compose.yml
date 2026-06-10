@@ -118,6 +118,8 @@ services:
         SERVICE: gateway-service
     restart: unless-stopped
     env_file: ./services/gateway-service/cmd/.env
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
       - "8081:8081"
     depends_on:
