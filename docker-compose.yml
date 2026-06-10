@@ -32,7 +32,7 @@ services:
   auth-service:
     build: ./services/auth-service
     restart: unless-stopped
-    env_file: ./services/auth-service/.env
+    env_file: ./services/auth-service/cmd/.env
     expose:
       - "50051"
     depends_on:
@@ -44,7 +44,7 @@ services:
   user-service:
     build: ./services/user-service
     restart: unless-stopped
-    env_file: ./services/user-service/.env
+    env_file: ./services/user-service/cmd/.env
     expose:
       - "50052"
     depends_on:
@@ -55,7 +55,7 @@ services:
   chat-service:
     build: ./services/chat-service
     restart: unless-stopped
-    env_file: ./services/chat-service/.env
+    env_file: ./services/chat-service/cmd/.env
     expose:
       - "50053"
     depends_on:
@@ -66,7 +66,7 @@ services:
   messaging-service:
     build: ./services/messaging-service
     restart: unless-stopped
-    env_file: ./services/messaging-service/.env
+    env_file: ./services/messaging-service/cmd/.env
     expose:
       - "50054"
     depends_on:
@@ -77,7 +77,7 @@ services:
   friends-service:
     build: ./services/friends-service
     restart: unless-stopped
-    env_file: ./services/friends-service/.env
+    env_file: ./services/friends-service/cmd/.env
     expose:
       - "50055"
     depends_on:
@@ -88,7 +88,7 @@ services:
   call-service:
     build: ./services/call-service
     restart: unless-stopped
-    env_file: ./services/call-service/.env
+    env_file: ./services/call-service/cmd/.env
     ports:
       - "8082:8082/udp"                    # DTLS — desktop клиент
       - "10000-10200:10000-10200/udp"      # WebRTC ICE (pion ephemeral UDP)
@@ -112,7 +112,7 @@ services:
   gateway:
     build: ./services/gateway-service
     restart: unless-stopped
-    env_file: ./services/gateway-service/.env
+    env_file: ./services/gateway-service/cmd/.env
     ports:
       - "8081:8081"
     depends_on:
