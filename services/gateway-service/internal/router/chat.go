@@ -19,6 +19,7 @@ func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.HandleFunc("/createGroup", JWTMiddleware(c, handleCreateGroup(c, cache)))
 	mux.HandleFunc("/clearChat",   JWTMiddleware(c, handleClearChat(c, cache)))
 	mux.HandleFunc("/deleteChat",  JWTMiddleware(c, handleDeleteChat(c, cache)))
+	mux.HandleFunc("/deleteGroup", JWTMiddleware(c, handleDeleteGroup(c, cache)))
 }
 
 func handleGetChats(c *clients.Clients) http.HandlerFunc {
@@ -186,9 +187,11 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		userID := r.Context().Value(UserIDKey).(string)
 
 		var data struct {
-			Name      string   `json:"name"`
-			IsPrivate bool     `json:"is_private"`
-			Members   []string `json:"members"` // usernames
+			Name        string   `json:"name"`
+			IsPrivate   bool     `json:"is_private"`
+			Members     []string `json:"members"`
+			AvatarColor string   `json:"avatar_color"` 
+			AvatarFile  string   `json:"avatar_file"`  
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			http.Error(w, "Bad request", http.StatusBadRequest)
@@ -207,10 +210,12 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}
 
 		resp, err := c.Chat.CreateGroup(r.Context(), &chatpb.CreateGroupRequest{
-			Name:      data.Name,
-			AdminId:   userID,
-			IsPrivate: data.IsPrivate,
-			Members:   memberIDs,
+			Name:        data.Name,
+			AdminId:     userID,
+			IsPrivate:   data.IsPrivate,
+			Members:     memberIDs,
+			AvatarColor: data.AvatarColor,
+			AvatarFile:  data.AvatarFile,
 		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -252,7 +257,7 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 		userID := r.Context().Value(UserIDKey).(string)
 
 		var data struct {
-			ChatID string `json:"chat_id"`
+			ChatId string `json:"chat_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			http.Error(w, "Bad request", http.StatusBadRequest)
@@ -260,10 +265,12 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 		}
 
 		// Получаем участников ДО очистки
-		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatID})
-
-		_, err := c.Chat.ClearChat(r.Context(), &chatpb.ClearChatRequest{
-			ChatId: data.ChatID,
+		pts, err := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatId})
+		if err != nil {
+			log.Printf("GetParticipants error: %v", err)
+		}
+		_, err = c.Chat.ClearChat(r.Context(), &chatpb.ClearChatRequest{
+			ChatId: data.ChatId,
 			UserId: userID,
 		})
 		if err != nil {
@@ -277,7 +284,7 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 			go func() {
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "CLEAR_CHAT",
-					"chat_id": data.ChatID,
+					"chat_id": data.ChatId,
 				})
 				for _, uid := range pts.UserIds {
 					cache.Publish(context.Background(), "ws:user:"+uid, payload)
@@ -299,7 +306,7 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 		userID := r.Context().Value(UserIDKey).(string)
 
 		var data struct {
-			ChatID string `json:"chat_id"`
+			ChatId string `json:"chat_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			http.Error(w, "Bad request", http.StatusBadRequest)
@@ -307,10 +314,10 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 		}
 
 		// Получаем участников ДО удаления (после — список недоступен)
-		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatID})
+		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatId})
 
 		_, err := c.Chat.DeleteChat(r.Context(), &chatpb.DeleteChatRequest{
-			ChatId: data.ChatID,
+			ChatId: data.ChatId,
 			UserId: userID,
 		})
 		if err != nil {
@@ -324,7 +331,55 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 			go func() {
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "DELETE_CHAT",
-					"chat_id": data.ChatID,
+					"chat_id": data.ChatId,
+				})
+				for _, uid := range pts.UserIds {
+					cache.Publish(context.Background(), "ws:user:"+uid, payload)
+				}
+			}()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"status": true})
+	}
+}
+
+
+func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.Context().Value(UserIDKey).(string)
+
+		var data struct {
+			ChatId string `json:"chat_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		// Получаем участников ДО удаления (после — список недоступен)
+		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatId})
+
+		_, err := c.Chat.DeleteGroup(r.Context(), &chatpb.DeleteGroupRequest{
+			ChatId: data.ChatId,
+			UserId: userID,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка удаления чата"})
+			return
+		}
+
+		// Уведомляем всех участников
+		if pts != nil {
+			go func() {
+				payload, _ := json.Marshal(map[string]string{
+					"type":    "DELETE_CHAT",
+					"chat_id": data.ChatId,
 				})
 				for _, uid := range pts.UserIds {
 					cache.Publish(context.Background(), "ws:user:"+uid, payload)

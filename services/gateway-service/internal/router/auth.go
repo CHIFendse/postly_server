@@ -52,6 +52,7 @@ func handleLogin(c *clients.Clients) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]any{
 			"token": tokenResp.Token,
 			"id":    userResp.UserId,
+			"username": data.Username,
 		})
 	}
 }

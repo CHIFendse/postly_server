@@ -87,7 +87,8 @@ services:
     restart: unless-stopped
     env_file: ./services/call-service/cmd/.env
     volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro   # TLS certs for DTLS
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
     ports:
       - "8082:8082/udp"                    # DTLS — desktop клиент
       - "10000-10200:10000-10200/udp"      # WebRTC ICE (pion ephemeral UDP)
@@ -120,11 +121,12 @@ services:
     env_file: ./services/gateway-service/cmd/.env
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
+
     ports:
       - "8081:8081"
     depends_on:
       - auth-service
-      - user-service
+      - user-service  
       - chat-service
       - messaging-service
       - friends-service

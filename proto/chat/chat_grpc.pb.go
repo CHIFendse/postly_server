@@ -25,6 +25,7 @@ const (
 	ChatService_ClearChat_FullMethodName         = "/chat.ChatService/ClearChat"
 	ChatService_GetGroups_FullMethodName         = "/chat.ChatService/GetGroups"
 	ChatService_CreateGroup_FullMethodName       = "/chat.ChatService/CreateGroup"
+	ChatService_DeleteGroup_FullMethodName       = "/chat.ChatService/DeleteGroup"
 	ChatService_GetParticipants_FullMethodName   = "/chat.ChatService/GetParticipants"
 	ChatService_UpdateLastMessage_FullMethodName = "/chat.ChatService/UpdateLastMessage"
 )
@@ -39,6 +40,7 @@ type ChatServiceClient interface {
 	ClearChat(ctx context.Context, in *ClearChatRequest, opts ...grpc.CallOption) (*ClearChatResponse, error)
 	GetGroups(ctx context.Context, in *GetGroupsRequest, opts ...grpc.CallOption) (*GetGroupsResponse, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*CreateGroupResponse, error)
+	DeleteGroup(ctx context.Context, in *DeleteGroupRequest, opts ...grpc.CallOption) (*DeleteGroupResponse, error)
 	GetParticipants(ctx context.Context, in *GetParticipantsRequest, opts ...grpc.CallOption) (*GetParticipantsResponse, error)
 	UpdateLastMessage(ctx context.Context, in *UpdateLastMessageRequest, opts ...grpc.CallOption) (*UpdateLastMessageResponse, error)
 }
@@ -111,6 +113,16 @@ func (c *chatServiceClient) CreateGroup(ctx context.Context, in *CreateGroupRequ
 	return out, nil
 }
 
+func (c *chatServiceClient) DeleteGroup(ctx context.Context, in *DeleteGroupRequest, opts ...grpc.CallOption) (*DeleteGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteGroupResponse)
+	err := c.cc.Invoke(ctx, ChatService_DeleteGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) GetParticipants(ctx context.Context, in *GetParticipantsRequest, opts ...grpc.CallOption) (*GetParticipantsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetParticipantsResponse)
@@ -141,6 +153,7 @@ type ChatServiceServer interface {
 	ClearChat(context.Context, *ClearChatRequest) (*ClearChatResponse, error)
 	GetGroups(context.Context, *GetGroupsRequest) (*GetGroupsResponse, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*CreateGroupResponse, error)
+	DeleteGroup(context.Context, *DeleteGroupRequest) (*DeleteGroupResponse, error)
 	GetParticipants(context.Context, *GetParticipantsRequest) (*GetParticipantsResponse, error)
 	UpdateLastMessage(context.Context, *UpdateLastMessageRequest) (*UpdateLastMessageResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
@@ -170,6 +183,9 @@ func (UnimplementedChatServiceServer) GetGroups(context.Context, *GetGroupsReque
 }
 func (UnimplementedChatServiceServer) CreateGroup(context.Context, *CreateGroupRequest) (*CreateGroupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateGroup not implemented")
+}
+func (UnimplementedChatServiceServer) DeleteGroup(context.Context, *DeleteGroupRequest) (*DeleteGroupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteGroup not implemented")
 }
 func (UnimplementedChatServiceServer) GetParticipants(context.Context, *GetParticipantsRequest) (*GetParticipantsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetParticipants not implemented")
@@ -306,6 +322,24 @@ func _ChatService_CreateGroup_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_DeleteGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).DeleteGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_DeleteGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).DeleteGroup(ctx, req.(*DeleteGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_GetParticipants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetParticipantsRequest)
 	if err := dec(in); err != nil {
@@ -372,6 +406,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateGroup",
 			Handler:    _ChatService_CreateGroup_Handler,
+		},
+		{
+			MethodName: "DeleteGroup",
+			Handler:    _ChatService_DeleteGroup_Handler,
 		},
 		{
 			MethodName: "GetParticipants",
