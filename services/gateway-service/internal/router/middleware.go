@@ -27,23 +27,31 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
+// authenticate проверяет Bearer-токен и возвращает user_id
+func authenticate(c *clients.Clients, r *http.Request) (string, bool) {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if token == "" {
+		return "", false
+	}
+
+	resp, err := c.Auth.ValidateToken(r.Context(), &authpb.ValidateTokenRequest{Token: token})
+	if err != nil || !resp.Valid {
+		return "", false
+	}
+	return resp.UserId, true
+}
+
 func JWTMiddleware(c *clients.Clients, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		resp, err := c.Auth.ValidateToken(r.Context(), &authpb.ValidateTokenRequest{Token: token})
-		if err != nil || !resp.Valid {
+		userID, ok := authenticate(c, r)
+		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		ctx = context.WithValue(ctx, UserIDKey, resp.UserId)
+		ctx = context.WithValue(ctx, UserIDKey, userID)
 		next(w, r.WithContext(ctx))
 	}
 }

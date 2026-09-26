@@ -9,6 +9,16 @@ service UserService {
     rpc DeleteUser(DeleteUserRequest)               returns (DeleteUserResponse);
     rpc GetUserByUsername(GetUserByUsernameRequest) returns (GetUserByUsernameResponse);
     rpc GetUserByUserId(GetUserByUserIdRequest)     returns (GetUserByUserIdResponse);
+    rpc GetUserInfo(GetUserInfoRequest)             returns (GetUserInfoResponse);
+}
+
+message GetUserInfoRequest { string user_id = 1; }
+message GetUserInfoResponse { 
+    string user_id = 1;
+    string username = 2;
+    string email = 3;
+    string phone = 4;
+    string avatar_url = 5;
 }
 
 message GetUserByUsernameRequest  { string username = 1; }

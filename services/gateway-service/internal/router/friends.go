@@ -3,7 +3,7 @@ package router
 import (
 	"encoding/json"
 	"net/http"
-
+	"fmt"
 	"gateway-service/internal/clients"
 	friendspb "postly/proto/friends"
 	userpb "postly/proto/user"
@@ -22,11 +22,12 @@ func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
 
 func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		user := r.Context().Value(UserIDKey).(string)
 		var data struct {
 			FriendId string `json:"friend_id"`
 		}
@@ -35,16 +36,30 @@ func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 		_, err := c.Friends.DeleteFriend(r.Context(), &friendspb.DeleteFriendReq{
-			UserId1: userID,
+			UserId1: user,
 			UserId2: data.FriendId,
 		})
+		fmt.Println(user)
 		if err != nil {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]string{"success":"error", "message": err.Error()})
-			return
+			resp, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.FriendId})
+			if err != nil {
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]string{"success":"error", "message": err.Error()})
+				fmt.Printf("Error from GetUserByUsername, data: %s\n", data.FriendId)
+				return
+			}
+			_, err = c.Friends.DeleteFriend(r.Context(), &friendspb.DeleteFriendReq{
+				UserId1: user,
+				UserId2: resp.UserId,
+			})
+			if err != nil {
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]string{"success":"error", "message": err.Error()})
+				fmt.Printf("Error from DeleteFriend, data: %s\n", resp.UserId)
+			}
+			
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"success": "ok"})
 
 	}

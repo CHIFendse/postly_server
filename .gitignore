@@ -1,4 +1,4 @@
-# Исполняемые файлы (компиляция Go)
+
 *.exe
 *.exe~
 *.dll
@@ -6,17 +6,16 @@
 *.dylib
 bin/
 
+*.env
 
-# Зависимости и рабочие пространства
 vendor/
 go.work
 
-# Логи и временные файлы
+
 *.log
 tmp/
 logs/
 
-# СЕКРЕТЫ (Самое важное!)
 .env
 .ENV
 config.yaml
@@ -25,18 +24,14 @@ cmd/.env
 cmd/.ENV
 
 .cache_ggshield/
-
-# Windows NTFS alternate data streams
 *:Zone.Identifier
 
-# IDE (PyCharm / VS Code)
 .idea/
 *.iml
 .vscode/
 *.sublime-project
 *.sublime-workspace
 
-# Идентификаторы и метаданные ОС
 .DS_Store
 Thumbs.db
 .directory

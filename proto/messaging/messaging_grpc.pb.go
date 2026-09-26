@@ -23,6 +23,7 @@ const (
 	MessagingService_SendMessage_FullMethodName        = "/messaging.MessagingService/SendMessage"
 	MessagingService_DeleteMessage_FullMethodName      = "/messaging.MessagingService/DeleteMessage"
 	MessagingService_DeleteChatMessages_FullMethodName = "/messaging.MessagingService/DeleteChatMessages"
+	MessagingService_GetFileInfo_FullMethodName        = "/messaging.MessagingService/GetFileInfo"
 )
 
 // MessagingServiceClient is the client API for MessagingService service.
@@ -33,6 +34,7 @@ type MessagingServiceClient interface {
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
 	DeleteChatMessages(ctx context.Context, in *DeleteChatMsgsRequest, opts ...grpc.CallOption) (*DeleteChatMsgsResponse, error)
+	GetFileInfo(ctx context.Context, in *GetFileInfoRequest, opts ...grpc.CallOption) (*GetFileInfoResponse, error)
 }
 
 type messagingServiceClient struct {
@@ -83,6 +85,16 @@ func (c *messagingServiceClient) DeleteChatMessages(ctx context.Context, in *Del
 	return out, nil
 }
 
+func (c *messagingServiceClient) GetFileInfo(ctx context.Context, in *GetFileInfoRequest, opts ...grpc.CallOption) (*GetFileInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFileInfoResponse)
+	err := c.cc.Invoke(ctx, MessagingService_GetFileInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServiceServer is the server API for MessagingService service.
 // All implementations must embed UnimplementedMessagingServiceServer
 // for forward compatibility.
@@ -91,6 +103,7 @@ type MessagingServiceServer interface {
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
 	DeleteChatMessages(context.Context, *DeleteChatMsgsRequest) (*DeleteChatMsgsResponse, error)
+	GetFileInfo(context.Context, *GetFileInfoRequest) (*GetFileInfoResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()
 }
 
@@ -112,6 +125,9 @@ func (UnimplementedMessagingServiceServer) DeleteMessage(context.Context, *Delet
 }
 func (UnimplementedMessagingServiceServer) DeleteChatMessages(context.Context, *DeleteChatMsgsRequest) (*DeleteChatMsgsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteChatMessages not implemented")
+}
+func (UnimplementedMessagingServiceServer) GetFileInfo(context.Context, *GetFileInfoRequest) (*GetFileInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFileInfo not implemented")
 }
 func (UnimplementedMessagingServiceServer) mustEmbedUnimplementedMessagingServiceServer() {}
 func (UnimplementedMessagingServiceServer) testEmbeddedByValue()                          {}
@@ -206,6 +222,24 @@ func _MessagingService_DeleteChatMessages_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_GetFileInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFileInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).GetFileInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_GetFileInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).GetFileInfo(ctx, req.(*GetFileInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessagingService_ServiceDesc is the grpc.ServiceDesc for MessagingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +262,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteChatMessages",
 			Handler:    _MessagingService_DeleteChatMessages_Handler,
+		},
+		{
+			MethodName: "GetFileInfo",
+			Handler:    _MessagingService_GetFileInfo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

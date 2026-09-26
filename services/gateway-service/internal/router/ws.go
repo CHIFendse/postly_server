@@ -58,7 +58,13 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 					sub.Close()
 					return
 				}
-				go handleIncoming(raw, userID, c.Messaging, c.Chat, cache)
+				go handleIncoming(
+					raw,
+					userID,
+					c.Messaging,
+					c.Chat,
+					cache,
+				)
 			}
 		}()
 
@@ -71,43 +77,82 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	}
 }
 
-func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceClient, chatSvc chatpb.ChatServiceClient, cache *redis.Client) {
+func handleIncoming(
+	raw []byte,
+	senderID string,
+	msgSvc msgpb.MessagingServiceClient,
+	chatSvc chatpb.ChatServiceClient,
+	cache *redis.Client,
+) {
 	var msg map[string]string
+
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("[GW] parse error from %s: %v — raw: %.100s", senderID, err, string(raw))
+		log.Printf(
+			"[GW] parse error from %s: %v — raw: %.100s",
+			senderID,
+			err,
+			string(raw),
+		)
 		return
 	}
-	log.Printf("[GW] recv type=%s chat=%s from=%s", msg["type"], msg["chat_id"], senderID)
+
+	log.Printf(
+		"[GW] recv type=%s chat=%s from=%s",
+		msg["type"],
+		msg["chat_id"],
+		senderID,
+	)
+
 	ctx := context.Background()
 	chatID := msg["chat_id"]
+
 	if chatID == "" {
 		return
 	}
 
 	// TYPING
 	if msg["type"] == "TYPING" {
-		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
+		pts, err := chatSvc.GetParticipants(
+			ctx,
+			&chatpb.GetParticipantsRequest{
+				ChatId: chatID,
+			},
+		)
 		if err != nil {
 			return
 		}
+
 		payload, _ := json.Marshal(map[string]string{
 			"type":      "TYPING",
 			"chat_id":   chatID,
 			"sender_id": senderID,
 			"username":  msg["username"],
 		})
+
 		for _, uid := range pts.UserIds {
 			if uid != senderID {
-				cache.Publish(ctx, "ws:user:"+uid, payload)
+				cache.Publish(
+					ctx,
+					"ws:user:"+uid,
+					payload,
+				)
 			}
 		}
+
 		return
 	}
 
-	// WebRTC signaling → SFU (not relayed to the other client directly).
-	// The SFU creates a peer connection per client and forwards audio between them.
-	if msg["type"] == "CALL_OFFER" || msg["type"] == "CALL_ICE" {
-		log.Printf("[GW] routing %s user=%s chat=%s", msg["type"], senderID, chatID)
+	// WebRTC signaling → SFU
+	if msg["type"] == "CALL_OFFER" ||
+		msg["type"] == "CALL_ICE" {
+
+		log.Printf(
+			"[GW] routing %s user=%s chat=%s",
+			msg["type"],
+			senderID,
+			chatID,
+		)
+
 		sfuPayload, _ := json.Marshal(map[string]string{
 			"type":      msg["type"],
 			"chat_id":   chatID,
@@ -115,13 +160,27 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 			"sdp":       msg["sdp"],
 			"candidate": msg["candidate"],
 		})
-		if err := cache.Publish(ctx, "callsfu:signal", string(sfuPayload)).Err(); err != nil {
-			log.Printf("[GW] Redis publish error: %v", err)
+
+		if err := cache.Publish(
+			ctx,
+			"callsfu:signal",
+			string(sfuPayload),
+		).Err(); err != nil {
+			log.Printf(
+				"[GW] Redis publish error: %v",
+				err,
+			)
 		}
+
 		return
 	}
 
-	log.Printf("[GW] msg type=%s user=%s chat=%s", msg["type"], senderID, chatID)
+	log.Printf(
+		"[GW] msg type=%s user=%s chat=%s",
+		msg["type"],
+		senderID,
+		chatID,
+	)
 
 	// Call control — relay to all other participants
 	callTypes := map[string]bool{
@@ -130,65 +189,197 @@ func handleIncoming(raw []byte, senderID string, msgSvc msgpb.MessagingServiceCl
 		"CALL_REJECT": true,
 		"CALL_HANGUP": true,
 	}
+
 	if callTypes[msg["type"]] {
-		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
+		pts, err := chatSvc.GetParticipants(
+			ctx,
+			&chatpb.GetParticipantsRequest{
+				ChatId: chatID,
+			},
+		)
 		if err != nil {
-			log.Printf("WS call GetParticipants: %v", err)
+			log.Printf(
+				"WS call GetParticipants: %v",
+				err,
+			)
 			return
 		}
+
 		payload, _ := json.Marshal(msg)
+
 		for _, uid := range pts.UserIds {
 			if uid == senderID {
 				continue
 			}
-			cache.Publish(ctx, "ws:user:"+uid, payload)
+
+			cache.Publish(
+				ctx,
+				"ws:user:"+uid,
+				payload,
+			)
+
 			if msg["type"] == "CALL_INVITE" {
-				go sendCallPush(ctx, cache, uid, msg["name"], chatID)
+				go sendCallPush(
+					ctx,
+					cache,
+					uid,
+					msg["name"],
+					chatID,
+				)
 			}
 		}
+
 		return
 	}
 
-	// Text message
+	// Message
+	msgType := msg["type"]
+
+	if msgType != "text" &&
+		msgType != "image" &&
+		msgType != "voice" &&
+		msgType != "file" &&
+		msgType != "video" {
+		return
+	}
+
 	text := msg["text"]
-	if text == "" {
-		return
-	}
-	sendResp, err := msgSvc.SendMessage(ctx, &msgpb.SendMessageRequest{
-		ChatId:   chatID,
-		SenderId: senderID,
-		Text:     text,
-	})
-	if err != nil {
-		log.Printf("WS SendMessage: %v", err)
+	fileKey := msg["file_url"]
+	fileName := msg["file_name"]
+	fileSize := msg["file_size"]
+
+	if msgType == "text" && text == "" {
 		return
 	}
 
-	pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
+	// Для файлов file_url от клиента — это S3 key.
+	// Никакая временная ссылка здесь не сохраняется.
+	if msgType != "text" && fileKey == "" {
+		log.Printf(
+			"[GW] file message without s3 key: type=%s chat=%s",
+			msgType,
+			chatID,
+		)
+		return
+	}
+
+	// Ключ должен быть выдан этому пользователю через /getUploadUrl,
+	// иначе можно подставить чужой файл и получить на него ссылку.
+	if msgType != "text" && !ownFileKey(fileKey, senderID) {
+		log.Printf(
+			"[GW] foreign s3 key rejected: user=%s key=%s",
+			senderID,
+			fileKey,
+		)
+		return
+	}
+
+	// Сохраняем сообщение.
+	// Для файла FileUrl содержит именно S3 key.
+	sendResp, err := msgSvc.SendMessage(
+		ctx,
+		&msgpb.SendMessageRequest{
+			ChatId:   chatID,
+			SenderId: senderID,
+			Text:     text,
+			Type:     msgType,
+			FileUrl:  fileKey,
+			FileName: fileName,
+			FileSize: fileSize,
+		},
+	)
 	if err != nil {
-		log.Printf("WS GetParticipants: %v", err)
+		log.Printf(
+			"WS SendMessage: %v",
+			err,
+		)
+		return
+	}
+
+	// Клиенту уходит адрес /file, а не presigned-ссылка на S3
+	fileURL := ""
+	if msgType != "text" {
+		fileURL = fileURLFor(sendResp.MessageId)
+	}
+
+	pts, err := chatSvc.GetParticipants(
+		ctx,
+		&chatpb.GetParticipantsRequest{
+			ChatId: chatID,
+		},
+	)
+	if err != nil {
+		log.Printf(
+			"WS GetParticipants: %v",
+			err,
+		)
+
 		confirm, _ := json.Marshal(map[string]string{
-			"type": "NEW_MESSAGE", "id": sendResp.MessageId,
-			"chat_id": chatID, "sender_id": senderID,
-			"username": msg["username"], "text": text,
+			"type":         "NEW_MESSAGE",
+			"id":           sendResp.MessageId,
+			"chat_id":      chatID,
+			"sender_id":    senderID,
+			"username":     msg["username"],
+			"text":         text,
+			"message_type": msgType,
+			"file_url":     fileURL,
+			"file_name":    fileName,
+			"file_size":    fileSize,
+			"created_at":   time.Now().UTC().Format(time.RFC3339),
 		})
-		cache.Publish(ctx, "ws:user:"+senderID, confirm)
+
+		cache.Publish(
+			ctx,
+			"ws:user:"+senderID,
+			confirm,
+		)
+
 		return
 	}
 
 	payload, _ := json.Marshal(map[string]string{
-		"type":       "NEW_MESSAGE",
-		"id":         sendResp.MessageId,
-		"chat_id":    chatID,
-		"sender_id":  senderID,
-		"username":   msg["username"],
-		"text":       text,
-		"created_at": time.Now().UTC().Format(time.RFC3339),
+		"type":         "NEW_MESSAGE",
+		"id":           sendResp.MessageId,
+		"chat_id":      chatID,
+		"sender_id":    senderID,
+		"username":     msg["username"],
+		"text":         text,
+		"message_type": msgType,
+		"file_url":     fileURL,
+		"file_name":    fileName,
+		"file_size":    fileSize,
+		"created_at":   time.Now().UTC().Format(time.RFC3339),
 	})
+
 	for _, uid := range pts.UserIds {
-		cache.Publish(ctx, "ws:user:"+uid, payload)
+		cache.Publish(
+			ctx,
+			"ws:user:"+uid,
+			payload,
+		)
+
 		if uid != senderID {
-			go sendMessagePush(ctx, cache, uid, msg["username"], text, chatID)
+			pushText := text
+
+			switch msgType {
+			case "image":
+				pushText = "Фотография..."
+			case "voice":
+				pushText = "Голосовое сообщение..."
+			case "file":
+				pushText = "Файл..."
+			case "video":
+				pushText = "Видео..."
+			}
+
+			go sendMessagePush(
+				ctx,
+				cache,
+				uid,
+				msg["username"],
+				pushText,
+				chatID,
+			)
 		}
 	}
 }

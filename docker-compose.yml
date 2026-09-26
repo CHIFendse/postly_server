@@ -136,6 +136,23 @@ services:
     networks:
       - internal
 
+
+  s3-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: s3-service
+    restart: unless-stopped
+    env_file: ./services/s3-service/cmd/.env
+    expose:
+      - "50056"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - internal
+
+
 # ── Сеть ─────────────────────────────────────────────────────────────────────
 
 networks:

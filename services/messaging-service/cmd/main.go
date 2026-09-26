@@ -19,6 +19,7 @@ import (
 	"messaging-service/internal/server"
 	chatpb "postly/proto/chat"
 	msgpb "postly/proto/messaging"
+	s3pb "postly/proto/s3"
 )
 
 func main() {
@@ -48,8 +49,17 @@ func main() {
 	}
 	defer chatConn.Close()
 
+	s3Conn, err := grpc.DialContext(ctx, os.Getenv("S3_SERVICE_ADDR"),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		log.Fatalf("cannot connect to chat-service: %v", err)
+	}
+	defer s3Conn.Close()
+
 	srv := grpc.NewServer()
-	msgpb.RegisterMessagingServiceServer(srv, server.New(conn, cache, chatpb.NewChatServiceClient(chatConn)))
+	msgpb.RegisterMessagingServiceServer(srv, server.New(conn, cache, chatpb.NewChatServiceClient(chatConn), s3pb.NewFileServiceClient(s3Conn)))
 	reflection.Register(srv)
 
 	addr := ":" + getenv("GRPC_PORT", "50054")

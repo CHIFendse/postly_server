@@ -12,6 +12,7 @@ func Setup(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	RegisterUser(mux, c)
 	RegisterChat(mux, c, cache)
 	RegisterMessaging(mux, c)
+	RegisterFiles(mux, c)
 	RegisterFriends(mux, c)
 	RegisterWS(mux, c, cache)
 	RegisterGetVersion(mux, c)
