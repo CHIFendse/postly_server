@@ -6,7 +6,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"mime"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,20 +18,17 @@ import (
 	s3pb "postly/proto/s3"
 )
 
-// Server реализует сгенерированный интерфейс FileServiceServer
 type Server struct {
 	s3pb.UnimplementedFileServiceServer
 	s3Storage *S3Client
 }
 
-// NewServer — конструктор gRPC-сервера
 func NewServer(s3Storage *S3Client) *Server {
 	return &Server{
 		s3Storage: s3Storage,
 	}
 }
 
-// UploadFile принимает поток байт (stream) от клиента и перенаправляет в Selectel S3
 func (s *Server) UploadFile(stream s3pb.FileService_UploadFileServer) error {
 	var fileName string
 	fileBuffer := bytes.NewBuffer(nil)
@@ -72,7 +71,7 @@ func (s *Server) UploadFile(stream s3pb.FileService_UploadFileServer) error {
 			}
 
 			return stream.SendAndClose(&s3pb.UploadFileResponse{
-				S3Key:  fileName,
+				S3Key:   fileName,
 				FileUrl: url,
 			})
 		}
@@ -95,13 +94,11 @@ func (s *Server) UploadFile(stream s3pb.FileService_UploadFileServer) error {
 	}
 }
 
-// GetDownloadUrl генерирует временную безопасную ссылку на приватный файл
 func (s *Server) GetDownloadUrl(ctx context.Context, req *s3pb.GetDownloadUrlRequest) (*s3pb.GetDownloadUrlResponse, error) {
 	if req.GetS3Key() == "" {
 		return nil, status.Error(codes.InvalidArgument, "s3 key is required")
 	}
 
-	// Задаем время жизни ссылки (по умолчанию 1 час, если не передано иное)
 	lifetime := time.Duration(req.GetExpiresInSec()) * time.Second
 	if lifetime <= 0 {
 		lifetime = time.Hour
@@ -115,24 +112,25 @@ func (s *Server) GetDownloadUrl(ctx context.Context, req *s3pb.GetDownloadUrlReq
 	return &s3pb.GetDownloadUrlResponse{Url: url}, nil
 }
 
-// Папки бакета, в которые разрешена загрузка файлов сообщений
-var uploadFolders = map[string]bool{
-	"images": true,
-	"videos": true,
-	"voices": true,
-	"files":  true,
+var uploadFolders = map[string][]string{
+	"images":  {"image/jpg", "image/jpeg", "image/png", "image/gif", "image/heic", "image/heif", "image/webp"},
+	"videos":  {"video/mp4", "video/avi", "video/mov", "video/wmv", "video/quicktime", "video/webm", "video/x-msvideo", "video/x-ms-wmv"},
+	"voices":  {"audio/mp3", "audio/wav", "audio/ogg", "audio/mpeg", "audio/webm", "audio/mp4"},
+	"files":   {},
+	"avatars": {"image/jpg", "image/jpeg", "image/png", "image/webp"},
 }
 
-// GetUploadUrl выдаёт presigned PUT-ссылку. Ключ генерируется здесь и содержит
-// user_id, чтобы gateway мог проверить, что клиент ссылается на свой файл.
 func (s *Server) GetUploadUrl(ctx context.Context, req *s3pb.GetUploadUrlRequest) (*s3pb.GetUploadUrlResponse, error) {
 	if req.GetUserId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "user id is required")
 	}
-	if !uploadFolders[req.GetFolder()] {
+	if _, ok := uploadFolders[req.GetFolder()]; !ok {
 		return nil, status.Errorf(codes.InvalidArgument, "unknown folder %q", req.GetFolder())
 	}
-
+	mim, _, _ := mime.ParseMediaType(req.GetContentType())
+	if len(uploadFolders[req.GetFolder()]) > 0 && !slices.Contains(uploadFolders[req.GetFolder()], mim) {
+		return nil, status.Errorf(codes.InvalidArgument, "unsupported content type %q", req.GetContentType())
+	}
 	id := make([]byte, 16)
 	if _, err := rand.Read(id); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate key: %v", err)
@@ -142,7 +140,7 @@ func (s *Server) GetUploadUrl(ctx context.Context, req *s3pb.GetUploadUrlRequest
 	if len(ext) > 10 {
 		ext = ""
 	}
-	key := req.GetFolder() + "/" + req.GetUserId() + "/" + hex.EncodeToString(id) + ext
+	key := strings.ToLower(req.GetFolder()) + "/" + req.GetUserId() + "/" + hex.EncodeToString(id) + ext
 
 	lifetime := time.Duration(req.GetExpiresInSec()) * time.Second
 	if lifetime <= 0 {
@@ -157,7 +155,6 @@ func (s *Server) GetUploadUrl(ctx context.Context, req *s3pb.GetUploadUrlRequest
 	return &s3pb.GetUploadUrlResponse{UploadUrl: url, S3Key: key}, nil
 }
 
-// DeleteFile удаляет объект из Selectel
 func (s *Server) DeleteFile(ctx context.Context, req *s3pb.DeleteFileRequest) (*s3pb.DeleteFileResponse, error) {
 	if req.GetS3Key() == "" {
 		return nil, status.Error(codes.InvalidArgument, "s3 key is required")

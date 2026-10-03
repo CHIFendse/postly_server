@@ -6,19 +6,19 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/redis/go-redis/v9"
 	"gateway-service/internal/clients"
+	"github.com/redis/go-redis/v9"
 	chatpb "postly/proto/chat"
 	userpb "postly/proto/user"
 )
 
 func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.HandleFunc("/getChats",    JWTMiddleware(c, handleGetChats(c)))
-	mux.HandleFunc("/getGroups",   JWTMiddleware(c, handleGetGroups(c)))
-	mux.HandleFunc("/createChat",  JWTMiddleware(c, handleCreateChat(c, cache)))
+	mux.HandleFunc("/getChats", JWTMiddleware(c, handleGetChats(c)))
+	mux.HandleFunc("/getGroups", JWTMiddleware(c, handleGetGroups(c)))
+	mux.HandleFunc("/createChat", JWTMiddleware(c, handleCreateChat(c, cache)))
 	mux.HandleFunc("/createGroup", JWTMiddleware(c, handleCreateGroup(c, cache)))
-	mux.HandleFunc("/clearChat",   JWTMiddleware(c, handleClearChat(c, cache)))
-	mux.HandleFunc("/deleteChat",  JWTMiddleware(c, handleDeleteChat(c, cache)))
+	mux.HandleFunc("/clearChat", JWTMiddleware(c, handleClearChat(c, cache)))
+	mux.HandleFunc("/deleteChat", JWTMiddleware(c, handleDeleteChat(c, cache)))
 	mux.HandleFunc("/deleteGroup", JWTMiddleware(c, handleDeleteGroup(c, cache)))
 }
 
@@ -33,7 +33,6 @@ func handleGetChats(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		// name = UUID другого пользователя, last_msg_sender = UUID отправителя — резолвим оба
 		type chatOut struct {
 			Id          string `json:"id"`
 			Name        string `json:"name"`
@@ -42,7 +41,6 @@ func handleGetChats(c *clients.Clients) http.HandlerFunc {
 			UpdatedAt   int64  `json:"updated_at"`
 		}
 
-		// Кешируем resolved UUID → username в рамках запроса
 		resolved := map[string]string{}
 		resolve := func(uid string) string {
 			if uid == "" {
@@ -85,7 +83,6 @@ func handleGetGroups(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		// Резолвим UUID отправителя → username (как в handleGetChats)
 		type groupOut struct {
 			Id          string `json:"id"`
 			Name        string `json:"name"`
@@ -164,7 +161,6 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 			return
 		}
 
-		// Уведомляем другого участника о новом чате
 		go func() {
 			payload, _ := json.Marshal(map[string]string{
 				"type":    "NEW_CHAT",
@@ -190,8 +186,8 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 			Name        string   `json:"name"`
 			IsPrivate   bool     `json:"is_private"`
 			Members     []string `json:"members"`
-			AvatarColor string   `json:"avatar_color"` 
-			AvatarFile  string   `json:"avatar_file"`  
+			AvatarColor string   `json:"avatar_color"`
+			AvatarFile  string   `json:"avatar_file"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			http.Error(w, "Bad request", http.StatusBadRequest)
@@ -223,7 +219,6 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 			return
 		}
 
-		// Уведомляем всех добавленных участников о новой группе
 		go func(groupID string, ids []string) {
 			payload, _ := json.Marshal(map[string]string{
 				"type":    "NEW_CHAT",
@@ -264,7 +259,6 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 			return
 		}
 
-		// Получаем участников ДО очистки
 		pts, err := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatId})
 		if err != nil {
 			log.Printf("GetParticipants error: %v", err)
@@ -279,7 +273,6 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 			return
 		}
 
-		// Уведомляем всех участников
 		if pts != nil {
 			go func() {
 				payload, _ := json.Marshal(map[string]string{
@@ -313,7 +306,6 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 			return
 		}
 
-		// Получаем участников ДО удаления (после — список недоступен)
 		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatId})
 
 		_, err := c.Chat.DeleteChat(r.Context(), &chatpb.DeleteChatRequest{
@@ -326,7 +318,6 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 			return
 		}
 
-		// Уведомляем всех участников
 		if pts != nil {
 			go func() {
 				payload, _ := json.Marshal(map[string]string{
@@ -344,7 +335,6 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 	}
 }
 
-
 func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -361,7 +351,6 @@ func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 			return
 		}
 
-		// Получаем участников ДО удаления (после — список недоступен)
 		pts, _ := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: data.ChatId})
 
 		_, err := c.Chat.DeleteGroup(r.Context(), &chatpb.DeleteGroupRequest{
@@ -374,7 +363,6 @@ func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 			return
 		}
 
-		// Уведомляем всех участников
 		if pts != nil {
 			go func() {
 				payload, _ := json.Marshal(map[string]string{

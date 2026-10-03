@@ -4,6 +4,6 @@ import (
 	"testing"
 )
 
-func test(){
+func test() {
 	testing.Testing()
 }

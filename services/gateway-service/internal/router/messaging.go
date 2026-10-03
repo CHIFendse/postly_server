@@ -12,15 +12,13 @@ import (
 	userpb "postly/proto/user"
 )
 
-
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/getMessages",   JWTMiddleware(c, handleGetMessages(c)))
-	mux.HandleFunc("/sendMessage",   JWTMiddleware(c, handleSendMessage(c)))
+	mux.HandleFunc("/getMessages", JWTMiddleware(c, handleGetMessages(c)))
+	mux.HandleFunc("/sendMessage", JWTMiddleware(c, handleSendMessage(c)))
 	mux.HandleFunc("/deleteMessage", JWTMiddleware(c, handleDeleteMessage(c)))
-	mux.HandleFunc("/getUploadUrl",  JWTMiddleware(c, handleGetUploadURL(c)))
+	mux.HandleFunc("/getUploadUrl", JWTMiddleware(c, handleGetUploadURL(c)))
 }
 
-// Папка в бакете по типу сообщения, а если он не передан — по content-type
 var folderByMsgType = map[string]string{
 	"image": "images",
 	"video": "videos",
@@ -43,8 +41,6 @@ func uploadFolder(msgType, contentType string) string {
 	return "files"
 }
 
-// ownFileKey проверяет, что ключ выдан этому пользователю через /getUploadUrl:
-// {folder}/{userID}/{name}
 func ownFileKey(key, userID string) bool {
 	parts := strings.Split(key, "/")
 	if len(parts) != 3 || parts[1] != userID || parts[2] == "" {
@@ -69,9 +65,9 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 		var data struct {
 			FileName    string `json:"file_name"`
 			ContentType string `json:"content_type"`
-			// Клиент может прислать число или строку — пока не используется
+
 			FileSize json.RawMessage `json:"file_size"`
-			// Необязательно: тип сообщения (image/video/voice/file)
+
 			MessageType string `json:"message_type"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -103,7 +99,7 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 
 func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Поддержка и GET ?chat_id=... и POST {chat_id: ...}
+
 		chatID := r.URL.Query().Get("chat_id")
 		if chatID == "" {
 			var body struct {
@@ -124,7 +120,6 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		// Резолвим sender_id → username для каждого уникального отправителя
 		usernames := map[string]string{}
 		for _, m := range resp.Messages {
 			if _, ok := usernames[m.SenderId]; !ok {
@@ -135,7 +130,6 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 			}
 		}
 
-		// Собираем ответ с username. created_at → миллисекунды (клиент ждёт ms для new Date())
 		type msgOut struct {
 			Id        string `json:"id"`
 			ChatId    string `json:"chat_id"`
@@ -155,7 +149,6 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 				msgType = "text"
 			}
 
-			// В базе S3-ключ — клиенту отдаём адрес /file с проверкой доступа
 			fileURL := ""
 			if msgType != "text" && m.FileUrl != "" {
 				fileURL = fileURLFor(m.Id)
@@ -166,7 +159,7 @@ func handleGetMessages(c *clients.Clients) http.HandlerFunc {
 				ChatId:    m.ChatId,
 				SenderId:  m.SenderId,
 				Text:      m.Text,
-				CreatedAt: m.CreatedAt * 1000, // секунды → миллисекунды
+				CreatedAt: m.CreatedAt * 1000,
 				Username:  usernames[m.SenderId],
 				Type:      msgType,
 				FileURL:   fileURL,

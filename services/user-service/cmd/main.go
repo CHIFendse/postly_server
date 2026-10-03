@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	userpb "postly/proto/user"
 	"user-service/internal/db"
 	"user-service/internal/server"
-	userpb "postly/proto/user"
 )
 
 func main() {

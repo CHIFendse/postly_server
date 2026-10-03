@@ -110,7 +110,6 @@ func handleIncoming(
 		return
 	}
 
-	// TYPING
 	if msg["type"] == "TYPING" {
 		pts, err := chatSvc.GetParticipants(
 			ctx,
@@ -142,7 +141,6 @@ func handleIncoming(
 		return
 	}
 
-	// WebRTC signaling → SFU
 	if msg["type"] == "CALL_OFFER" ||
 		msg["type"] == "CALL_ICE" {
 
@@ -182,7 +180,6 @@ func handleIncoming(
 		chatID,
 	)
 
-	// Call control — relay to all other participants
 	callTypes := map[string]bool{
 		"CALL_INVITE": true,
 		"CALL_ACCEPT": true,
@@ -232,7 +229,6 @@ func handleIncoming(
 		return
 	}
 
-	// Message
 	msgType := msg["type"]
 
 	if msgType != "text" &&
@@ -252,8 +248,6 @@ func handleIncoming(
 		return
 	}
 
-	// Для файлов file_url от клиента — это S3 key.
-	// Никакая временная ссылка здесь не сохраняется.
 	if msgType != "text" && fileKey == "" {
 		log.Printf(
 			"[GW] file message without s3 key: type=%s chat=%s",
@@ -263,8 +257,6 @@ func handleIncoming(
 		return
 	}
 
-	// Ключ должен быть выдан этому пользователю через /getUploadUrl,
-	// иначе можно подставить чужой файл и получить на него ссылку.
 	if msgType != "text" && !ownFileKey(fileKey, senderID) {
 		log.Printf(
 			"[GW] foreign s3 key rejected: user=%s key=%s",
@@ -274,8 +266,6 @@ func handleIncoming(
 		return
 	}
 
-	// Сохраняем сообщение.
-	// Для файла FileUrl содержит именно S3 key.
 	sendResp, err := msgSvc.SendMessage(
 		ctx,
 		&msgpb.SendMessageRequest{
@@ -296,7 +286,6 @@ func handleIncoming(
 		return
 	}
 
-	// Клиенту уходит адрес /file, а не presigned-ссылка на S3
 	fileURL := ""
 	if msgType != "text" {
 		fileURL = fileURLFor(sendResp.MessageId)

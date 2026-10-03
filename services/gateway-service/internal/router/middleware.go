@@ -27,7 +27,6 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
-// authenticate проверяет Bearer-токен и возвращает user_id
 func authenticate(c *clients.Clients, r *http.Request) (string, bool) {
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if token == "" {

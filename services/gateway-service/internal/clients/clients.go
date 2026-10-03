@@ -9,12 +9,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	authpb    "postly/proto/auth"
-	chatpb    "postly/proto/chat"
+	authpb "postly/proto/auth"
+	chatpb "postly/proto/chat"
 	friendspb "postly/proto/friends"
-	msgpb     "postly/proto/messaging"
-	userpb    "postly/proto/user"
-	s3pb	  "postly/proto/s3"
+	msgpb "postly/proto/messaging"
+	s3pb "postly/proto/s3"
+	userpb "postly/proto/user"
 )
 
 type Clients struct {
@@ -23,7 +23,7 @@ type Clients struct {
 	Chat      chatpb.ChatServiceClient
 	Messaging msgpb.MessagingServiceClient
 	Friends   friendspb.FriendsServiceClient
-	S3 		  s3pb.FileServiceClient
+	S3        s3pb.FileServiceClient
 }
 
 func New() *Clients {
@@ -33,7 +33,7 @@ func New() *Clients {
 		Chat:      chatpb.NewChatServiceClient(dial(os.Getenv("CHAT_SERVICE_ADDR"))),
 		Messaging: msgpb.NewMessagingServiceClient(dial(os.Getenv("MESSAGING_SERVICE_ADDR"))),
 		Friends:   friendspb.NewFriendsServiceClient(dial(os.Getenv("FRIENDS_SERVICE_ADDR"))),
-		S3: 	   s3pb.NewFileServiceClient(dial(os.Getenv("S3_SERVICE_ADDR"))),
+		S3:        s3pb.NewFileServiceClient(dial(os.Getenv("S3_SERVICE_ADDR"))),
 	}
 }
 

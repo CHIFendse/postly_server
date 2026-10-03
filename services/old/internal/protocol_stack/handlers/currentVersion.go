@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 )
+
 //go:embed version.txt
 var versionData string
 

@@ -1,10 +1,10 @@
 package udp
 
 import (
+	"log"
 	"net"
 	"sync"
 	"time"
-	"log"
 )
 
 type UserAddr struct {
@@ -18,9 +18,9 @@ type UserAddr struct {
 
 type RoomManager struct {
 	Mu         sync.RWMutex
-	Rooms      map[string]map[string]*UserAddr // map[roomID]map[userID]*UserAddr
-	AddrToUser map[string]string               // map[ip:port]userID
-	UserToRoom map[string]string               // map[userID]roomID
+	Rooms      map[string]map[string]*UserAddr
+	AddrToUser map[string]string
+	UserToRoom map[string]string
 }
 
 func NewRoomManager() *RoomManager {
@@ -31,7 +31,6 @@ func NewRoomManager() *RoomManager {
 	}
 }
 
-// Returns true if this is a new user (for logging).
 func (rm *RoomManager) AddUser(roomID, userID string, conn net.Conn) bool {
 	rm.Mu.Lock()
 	defer rm.Mu.Unlock()

@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// MigrateFriends создаёт таблицы friend_requests и friends если их нет.
 func MigrateFriends(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS friend_requests (
@@ -31,7 +30,6 @@ func MigrateFriends(db *sql.DB) error {
 	return err
 }
 
-// FriendRequest — входящая заявка в друзья.
 type FriendRequest struct {
 	ID        string    `json:"id"`
 	SenderID  string    `json:"sender_id"`
@@ -39,14 +37,11 @@ type FriendRequest struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Friend — запись о друге пользователя.
 type Friend struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 }
 
-// SendFriendRequest отправляет заявку в друзья.
-// Возвращает (requestID, receiverID, error).
 func (r *Repository) SendFriendRequest(senderID, targetUsername string) (string, string, error) {
 	var receiverID string
 	err := r.db.QueryRow(
@@ -59,7 +54,6 @@ func (r *Repository) SendFriendRequest(senderID, targetUsername string) (string,
 		return "", "", fmt.Errorf("нельзя добавить себя в друзья")
 	}
 
-	// Уже друзья?
 	u1, u2 := senderID, receiverID
 	if u1 > u2 {
 		u1, u2 = u2, u1
@@ -69,7 +63,6 @@ func (r *Repository) SendFriendRequest(senderID, targetUsername string) (string,
 		return "", "", fmt.Errorf("вы уже друзья")
 	}
 
-	// Заявка уже существует?
 	var existingID string
 	err = r.db.QueryRow(
 		"SELECT id FROM friend_requests WHERE sender_id=$1 AND receiver_id=$2 AND status='pending'",
@@ -79,7 +72,6 @@ func (r *Repository) SendFriendRequest(senderID, targetUsername string) (string,
 		return existingID, receiverID, nil
 	}
 
-	// Создаём заявку
 	var reqID string
 	err = r.db.QueryRow(
 		"INSERT INTO friend_requests (sender_id, receiver_id) VALUES ($1,$2) ON CONFLICT (sender_id,receiver_id) DO UPDATE SET status='pending' RETURNING id",
@@ -91,7 +83,6 @@ func (r *Repository) SendFriendRequest(senderID, targetUsername string) (string,
 	return reqID, receiverID, nil
 }
 
-// GetFriendRequests возвращает входящие ожидающие заявки для пользователя.
 func (r *Repository) GetFriendRequests(userID string) ([]*FriendRequest, error) {
 	rows, err := r.db.Query(`
 		SELECT fr.id, fr.sender_id, u.username, fr.created_at
@@ -119,7 +110,6 @@ func (r *Repository) GetFriendRequests(userID string) ([]*FriendRequest, error) 
 	return requests, rows.Err()
 }
 
-// AcceptFriendRequest принимает заявку: ставит статус accepted и добавляет запись в friends.
 func (r *Repository) AcceptFriendRequest(userID, requestID string) error {
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -127,7 +117,6 @@ func (r *Repository) AcceptFriendRequest(userID, requestID string) error {
 	}
 	defer tx.Rollback()
 
-	// Проверяем, что заявка адресована именно этому пользователю
 	var senderID string
 	err = tx.QueryRow(
 		"UPDATE friend_requests SET status='accepted' WHERE id=$1 AND receiver_id=$2 AND status='pending' RETURNING sender_id",
@@ -137,7 +126,6 @@ func (r *Repository) AcceptFriendRequest(userID, requestID string) error {
 		return fmt.Errorf("заявка не найдена или уже обработана")
 	}
 
-	// Вставляем дружбу (user_id1 < user_id2 для уникальности)
 	u1, u2 := senderID, userID
 	if u1 > u2 {
 		u1, u2 = u2, u1
@@ -152,7 +140,6 @@ func (r *Repository) AcceptFriendRequest(userID, requestID string) error {
 	return tx.Commit()
 }
 
-// DeclineFriendRequest отклоняет (удаляет) заявку.
 func (r *Repository) DeclineFriendRequest(userID, requestID string) error {
 	res, err := r.db.Exec(
 		"UPDATE friend_requests SET status='declined' WHERE id=$1 AND receiver_id=$2 AND status='pending'",
@@ -168,7 +155,6 @@ func (r *Repository) DeclineFriendRequest(userID, requestID string) error {
 	return nil
 }
 
-// GetFriends возвращает список друзей пользователя.
 func (r *Repository) GetFriends(userID string) ([]*Friend, error) {
 	rows, err := r.db.Query(`
 		SELECT u.id, u.username

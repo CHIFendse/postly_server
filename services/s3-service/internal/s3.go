@@ -12,12 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-
 type S3Client struct {
 	BucketName string
 	client     *s3.Client
 }
-
 
 func NewS3Client() (*S3Client, error) {
 	accountKey := os.Getenv("S3_ACCESS_KEY")
@@ -48,7 +46,6 @@ func NewS3Client() (*S3Client, error) {
 	}, nil
 }
 
-
 func (s *S3Client) UploadFromReader(ctx context.Context, reader io.Reader, s3ObjectKey string) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &s.BucketName,
@@ -61,7 +58,6 @@ func (s *S3Client) UploadFromReader(ctx context.Context, reader io.Reader, s3Obj
 	return nil
 }
 
-// DownloadFile возвращает поток для скачивания файла
 func (s *S3Client) DownloadFile(ctx context.Context, s3ObjectKey string) (io.ReadCloser, error) {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &s.BucketName,
@@ -73,7 +69,6 @@ func (s *S3Client) DownloadFile(ctx context.Context, s3ObjectKey string) (io.Rea
 	return result.Body, nil
 }
 
-// DeleteFile удаляет файл из бакета Selectel
 func (s *S3Client) DeleteFile(ctx context.Context, s3ObjectKey string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: &s.BucketName,
@@ -85,9 +80,6 @@ func (s *S3Client) DeleteFile(ctx context.Context, s3ObjectKey string) error {
 	return nil
 }
 
-// newPresignClient подписывает ссылки в virtual-hosted стиле (bucket.host/key):
-// Selectel отдаёт CORS-заголовки только на таком адресе, на path-style
-// preflight получает 405 и браузер блокирует загрузку.
 func (s *S3Client) newPresignClient() *s3.PresignClient {
 	return s3.NewPresignClient(s.client, func(o *s3.PresignOptions) {
 		o.ClientOptions = append(o.ClientOptions, func(o *s3.Options) {
@@ -96,7 +88,6 @@ func (s *S3Client) newPresignClient() *s3.PresignClient {
 	})
 }
 
-// GetPresignedURL генерирует временную безопасную ссылку на приватный файл
 func (s *S3Client) GetPresignedURL(ctx context.Context, s3ObjectKey string, lifetime time.Duration) (string, error) {
 	presignClient := s.newPresignClient()
 
@@ -104,7 +95,7 @@ func (s *S3Client) GetPresignedURL(ctx context.Context, s3ObjectKey string, life
 		Bucket: &s.BucketName,
 		Key:    &s3ObjectKey,
 	}, s3.WithPresignExpires(lifetime))
-	
+
 	if err != nil {
 		return "", fmt.Errorf("не удалось создать преподписанную ссылку: %w", err)
 	}
@@ -112,7 +103,6 @@ func (s *S3Client) GetPresignedURL(ctx context.Context, s3ObjectKey string, life
 	return request.URL, nil
 }
 
-// GetPresignedPutURL генерирует временную ссылку для прямой загрузки файла клиентом
 func (s *S3Client) GetPresignedPutURL(ctx context.Context, s3ObjectKey, contentType string, lifetime time.Duration) (string, error) {
 	presignClient := s.newPresignClient()
 

@@ -16,9 +16,6 @@ import (
 
 const fcmTokenPrefix = "fcm:user:"
 
-// ── FCM HTTP v1 (old legacy API shut down June 2024) ─────────────────────────
-// Set FIREBASE_CREDENTIALS = content of serviceAccountKey.json (minified, one line)
-
 var (
 	fcmProjectID string
 	fcmGetToken  func(ctx context.Context) (string, error)
@@ -92,8 +89,6 @@ func getFCMToken(ctx context.Context, cache *redis.Client, userID string) string
 	return t
 }
 
-// ── HTTP handler ──────────────────────────────────────────────────────────────
-
 func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -114,12 +109,6 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 	}
 }
 
-// ── Push senders ──────────────────────────────────────────────────────────────
-
-// sendCallPush — DATA-ONLY, HIGH priority.
-// Data-only ensures PostlyMessagingService.onMessageReceived fires even when
-// the app is killed, so we can show a fullScreenIntent call notification.
-// A notification field would cause Android to handle it silently as heads-up.
 func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerName, chatID string) {
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
@@ -127,9 +116,9 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 	}
 	fcmSend(ctx, map[string]any{
 		"token": deviceToken,
-		// NO "notification" field — data-only so onMessageReceived always fires
+
 		"android": map[string]any{
-			"priority": "HIGH", // wakes device from doze
+			"priority": "HIGH",
 		},
 		"apns": map[string]any{
 			"headers": map[string]string{"apns-priority": "10"},
@@ -148,10 +137,6 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 	})
 }
 
-// sendMessagePush — notification + data, HIGH priority.
-// "notification" field makes Android show the message natively (guaranteed on all
-// manufacturers). "data" field is included so onMessageReceived still fires in
-// foreground, allowing the app to suppress the duplicate when the chat is open.
 func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, senderName, text, chatID string) {
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
@@ -163,8 +148,7 @@ func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, send
 	}
 	fcmSend(ctx, map[string]any{
 		"token": deviceToken,
-		// notification field → Android shows it natively even if app is killed.
-		// channel_id must match a channel created by the app.
+
 		"notification": map[string]string{
 			"title": senderName,
 			"body":  preview,

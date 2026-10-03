@@ -11,8 +11,6 @@ import (
 
 var rdb *redis.Client
 
-// Init подключается к Redis. Вызывается один раз при старте из initialize.go.
-// Если Redis недоступен — кэш работает как no-op, сервер продолжает работу без кэша.
 func Init(host, port, password string) {
 	if host == "" || port == "" {
 		log.Println("[cache] REDIS_HOST/REDIS_PORT не заданы — кэш отключён")
@@ -35,8 +33,6 @@ func Init(host, port, password string) {
 	}
 }
 
-// Cache — типизированная обёртка над Redis с JSON-сериализацией значений.
-// Ключи Redis: "<prefix>:<key>".
 type Cache[V any] struct {
 	prefix string
 }

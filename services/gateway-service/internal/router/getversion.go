@@ -3,19 +3,19 @@ package router
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
+	"gateway-service/internal/clients"
 	"net/http"
 	"strings"
-	"gateway-service/internal/clients"
 	"time"
-	"fmt"
-	
 )
+
 //go:embed version.txt
 var versionData string
 
 func RegisterGetVersion(mux *http.ServeMux, c *clients.Clients) {
 	fmt.Printf("LOG [%s], success initialize getVersion", time.Now())
-	mux.HandleFunc("/getVersion",  HandleVersion(c))
+	mux.HandleFunc("/getVersion", HandleVersion(c))
 
 }
 
@@ -31,4 +31,3 @@ func HandleVersion(_ *clients.Clients) http.HandlerFunc {
 		})
 	}
 }
-

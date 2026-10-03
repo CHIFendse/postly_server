@@ -27,7 +27,6 @@ func New(db *sql.DB, cache *redis.Client) *Auth {
 	return &Auth{db: db, cache: cache}
 }
 
-// SetCredentials вызывается user-service после создания пользователя.
 func (s *Auth) SetCredentials(ctx context.Context, req *authpb.SetCredentialsRequest) (*authpb.SetCredentialsResponse, error) {
 	if req.UserId == "" || req.Password == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id and password required")
@@ -50,7 +49,6 @@ func (s *Auth) SetCredentials(ctx context.Context, req *authpb.SetCredentialsReq
 	return &authpb.SetCredentialsResponse{Ok: true}, nil
 }
 
-// Login получает user_id от gateway (тот спрашивает user-service по username/email).
 func (s *Auth) Login(ctx context.Context, req *authpb.LoginRequest) (*authpb.LoginResponse, error) {
 	var hash string
 	err := s.db.QueryRowContext(ctx,

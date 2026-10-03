@@ -39,7 +39,6 @@ func main() {
 		log.Fatal("cannot load .env")
 	}
 
-	// ── WebRTC SFU (browser clients) ─────────────────────────────────────────
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     getenv("REDIS_ADDR", "localhost:6379"),
 		Password: getenv("REDIS_PASSWORD", ""),
@@ -51,7 +50,6 @@ func main() {
 	go wSFU.Run(sfuCtx)
 	log.Println("[SFU] goroutine launched")
 
-	// ── Legacy DTLS SFU (Go desktop client) ──────────────────────────────────
 	rooms := udp.NewRoomManager()
 
 	go func() {

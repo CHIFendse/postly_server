@@ -9,37 +9,36 @@ import (
 )
 
 var (
-	// msgCache: chatID → список сообщений. TTL 60 сек, инвалидируется при AddMessage.
 	msgCache = cache.New[[]*Messages]("msg")
-	// userCache: userID → username. TTL 10 мин.
+
 	userCache = cache.New[string]("user")
-	// participantsCache: chatID/groupID → []userID. TTL 5 мин.
+
 	participantsCache = cache.New[[]string]("participants")
 )
 
 type Repository struct {
-    db *sql.DB
+	db *sql.DB
 }
 
 func NewRepository(db *sql.DB) *Repository {
-    return &Repository{db: db}
+	return &Repository{db: db}
 }
 
 type Chats struct {
 	Id            string `json:"id"`
 	Name          string `json:"name"`
-    LastMsg       string `json:"last_message"`
-    LastMsgSender string `json:"username"`
-    UpdatedAt     int    `json:"updated_at"`
+	LastMsg       string `json:"last_message"`
+	LastMsgSender string `json:"username"`
+	UpdatedAt     int    `json:"updated_at"`
 }
 
 type Groups struct {
-    Id            string    `json:"id"`
-    Name          string    `json:"name"`
-    CreatedAt     time.Time `json:"created_at"`
-    LastMsg       string    `json:"last_message"`
-    LastMsgSender string    `json:"username"`
-    UpdatedAt     int       `json:"updated_at"`
+	Id            string    `json:"id"`
+	Name          string    `json:"name"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastMsg       string    `json:"last_message"`
+	LastMsgSender string    `json:"username"`
+	UpdatedAt     int       `json:"updated_at"`
 }
 
 type Messages struct {
@@ -48,7 +47,7 @@ type Messages struct {
 	Chat_id    string    `json:"chat_id"`
 	Sender_id  string    `json:"sender_id"`
 	Created_at time.Time `json:"created_at"`
-    Username   string    `json:"username"`
+	Username   string    `json:"username"`
 }
 
 func (c *Repository) GetGroups(id string) ([]*Groups, error) {
@@ -64,36 +63,35 @@ func (c *Repository) GetGroups(id string) ([]*Groups, error) {
         ORDER BY COALESCE(g.updated_at, g.created_at) DESC
     `
 
-    rows, err := c.db.Query(query, id)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	rows, err := c.db.Query(query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    var groups []*Groups
-    for rows.Next() {
-        g := &Groups{}
-        err := rows.Scan(&g.Id, &g.Name, &g.CreatedAt, &g.LastMsg, &g.LastMsgSender, &g.UpdatedAt)
-        if err != nil {
-            return nil, err
-        }
-        groups = append(groups, g)
-    }
+	var groups []*Groups
+	for rows.Next() {
+		g := &Groups{}
+		err := rows.Scan(&g.Id, &g.Name, &g.CreatedAt, &g.LastMsg, &g.LastMsgSender, &g.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
 
-    if groups == nil {
-        groups = []*Groups{}
-    }
+	if groups == nil {
+		groups = []*Groups{}
+	}
 
-    return groups, nil
+	return groups, nil
 }
 
 func (c *Repository) GetMessages(chat_id string) ([]*Messages, error) {
-	// Кэш-хит: не идём в БД
+
 	if cached, ok := msgCache.Get(chat_id); ok {
 		return cached, nil
 	}
 
-	// JOIN с users — один запрос вместо N+1
 	query := `
 		SELECT m.id, m.text, m.conversation_id, m.sender_id, m.created_at,
 		       COALESCE(u.username, '')
@@ -143,161 +141,161 @@ func (c *Repository) GetChats(id string) ([]*Chats, error) {
         WHERE c.user_id1 = $1::uuid OR c.user_id2 = $1::uuid 
         ORDER BY c.updated_at DESC;`
 
-    rows, err := c.db.Query(query, id)
+	rows, err := c.db.Query(query, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	chats := []*Chats{}
-    
-    for rows.Next(){
-        m := new(Chats)
-        err := rows.Scan(&m.Id, &m.Name, &m.LastMsg, &m.LastMsgSender, &m.UpdatedAt)
-        if err != nil {
-            fmt.Println("Ошибка Scan:", err)
-            return nil, err
-        } 
-        chats = append(chats, m)
-    }
 
-    return chats, nil
+	for rows.Next() {
+		m := new(Chats)
+		err := rows.Scan(&m.Id, &m.Name, &m.LastMsg, &m.LastMsgSender, &m.UpdatedAt)
+		if err != nil {
+			fmt.Println("Ошибка Scan:", err)
+			return nil, err
+		}
+		chats = append(chats, m)
+	}
+
+	return chats, nil
 }
 
 func (c *Repository) AddMessage(chat_id, sender_id, text string) (string, error) {
-    tx, err := c.db.Begin()
-    if err != nil {
-        return "", err
-    }
-    defer tx.Rollback()
+	tx, err := c.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
 
-    var newID string
-    query := `INSERT INTO messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
-    
-    err = tx.QueryRow(query, chat_id, sender_id, text).Scan(&newID)
-    if err != nil {
-        fmt.Println("Ошибка добавления сообщения:", err)
-        return "", err
-    }
+	var newID string
+	query := `INSERT INTO messages (conversation_id, sender_id, text) VALUES($1, $2, $3) RETURNING id;`
 
-    result, err := tx.Exec(`
+	err = tx.QueryRow(query, chat_id, sender_id, text).Scan(&newID)
+	if err != nil {
+		fmt.Println("Ошибка добавления сообщения:", err)
+		return "", err
+	}
+
+	result, err := tx.Exec(`
         UPDATE chats 
         SET last_message = $1, last_msg_sender = $2, updated_at = NOW()
-        WHERE id = $3`, 
-        text, sender_id, chat_id)
-    if err != nil {
-        return "", err
-    }
+        WHERE id = $3`,
+		text, sender_id, chat_id)
+	if err != nil {
+		return "", err
+	}
 
-    rowsAffected, _ := result.RowsAffected()
+	rowsAffected, _ := result.RowsAffected()
 
-    if rowsAffected == 0 {
-        // SAVEPOINT изолирует UPDATE groups: если он упадёт (тип/ограничение),
-        // транзакция не уходит в aborted-state и INSERT сообщения не откатывается.
-        if _, spErr := tx.Exec("SAVEPOINT sp_grp"); spErr == nil {
-            _, grpErr := tx.Exec(`
+	if rowsAffected == 0 {
+
+		if _, spErr := tx.Exec("SAVEPOINT sp_grp"); spErr == nil {
+			_, grpErr := tx.Exec(`
                 UPDATE groups
                 SET last_message = $1, last_msg_sender = $2, updated_at = NOW()
                 WHERE id = $3`,
-                text, sender_id, chat_id)
-            if grpErr != nil {
-                log.Printf("groups.last_message не обновлён: %v", grpErr)
-                tx.Exec("ROLLBACK TO SAVEPOINT sp_grp")
-            } else {
-                tx.Exec("RELEASE SAVEPOINT sp_grp")
-            }
-        }
-    }
+				text, sender_id, chat_id)
+			if grpErr != nil {
+				log.Printf("groups.last_message не обновлён: %v", grpErr)
+				tx.Exec("ROLLBACK TO SAVEPOINT sp_grp")
+			} else {
+				tx.Exec("RELEASE SAVEPOINT sp_grp")
+			}
+		}
+	}
 
-    if err = tx.Commit(); err != nil {
-        return "", err
-    }
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
 
-    // Инвалидируем кэш сообщений для этого чата
-    msgCache.Delete(chat_id)
+	msgCache.Delete(chat_id)
 
-    return newID, nil
+	return newID, nil
 }
 
 func (r *Repository) CreateNewChat(userID string, targetUsername string) (string, string, error) {
-    var targetUserID string
-    err := r.db.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", targetUsername).Scan(&targetUserID)
-    if err != nil {
-        return "", "", err
-    }
+	var targetUserID string
+	err := r.db.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", targetUsername).Scan(&targetUserID)
+	if err != nil {
+		return "", "", err
+	}
 
-    u1, u2 := userID, targetUserID
-    if u1 > u2 { u1, u2 = u2, u1 }
+	u1, u2 := userID, targetUserID
+	if u1 > u2 {
+		u1, u2 = u2, u1
+	}
 
-    var existingID string
-    err = r.db.QueryRow("SELECT id FROM chats WHERE user_id1 = $1 AND user_id2 = $2", u1, u2).Scan(&existingID)
-    if err == nil {
-        return existingID, targetUserID, nil
-    }
+	var existingID string
+	err = r.db.QueryRow("SELECT id FROM chats WHERE user_id1 = $1 AND user_id2 = $2", u1, u2).Scan(&existingID)
+	if err == nil {
+		return existingID, targetUserID, nil
+	}
 
-    tx, err := r.db.Begin()
-    if err != nil { return "", "", err }
+	tx, err := r.db.Begin()
+	if err != nil {
+		return "", "", err
+	}
 
-    var newID string
-    err = tx.QueryRow("INSERT INTO conversations (type) VALUES ('private') RETURNING id").Scan(&newID)
-    if err != nil {
-        tx.Rollback()
-        return "", "", err
-    }
+	var newID string
+	err = tx.QueryRow("INSERT INTO conversations (type) VALUES ('private') RETURNING id").Scan(&newID)
+	if err != nil {
+		tx.Rollback()
+		return "", "", err
+	}
 
-    _, err = tx.Exec("INSERT INTO chats (id, user_id1, user_id2, updated_at) VALUES ($1, $2, $3, NOW())", newID, u1, u2)
-    if err != nil {
-        tx.Rollback()
-        return "", "", err
-    }
+	_, err = tx.Exec("INSERT INTO chats (id, user_id1, user_id2, updated_at) VALUES ($1, $2, $3, NOW())", newID, u1, u2)
+	if err != nil {
+		tx.Rollback()
+		return "", "", err
+	}
 
-    err = tx.Commit()
-    return newID, targetUserID, nil
+	err = tx.Commit()
+	return newID, targetUserID, nil
 }
 
 func (r *Repository) CreateNewGroup(name string, adminID string, isPrivate bool, members []string) (string, error) {
-    log.Printf("CreateNewGroup: name=%s, adminID=%s, members=%v", name, adminID, members)
-    tx, err := r.db.Begin()
-    if err != nil {
-        return "", err
-    }
-    defer tx.Rollback()
+	log.Printf("CreateNewGroup: name=%s, adminID=%s, members=%v", name, adminID, members)
+	tx, err := r.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
 
-    var newID string
-    err = tx.QueryRow("INSERT INTO conversations (type) VALUES ('group') RETURNING id").Scan(&newID)
-    if err != nil {
-        return "", err
-    }
+	var newID string
+	err = tx.QueryRow("INSERT INTO conversations (type) VALUES ('group') RETURNING id").Scan(&newID)
+	if err != nil {
+		return "", err
+	}
 
-    _, err = tx.Exec("INSERT INTO groups (id, name, admin_id, is_private) VALUES ($1, $2, $3, $4)", newID, name, adminID, isPrivate)
-    if err != nil {
-        return "", err
-    }
+	_, err = tx.Exec("INSERT INTO groups (id, name, admin_id, is_private) VALUES ($1, $2, $3, $4)", newID, name, adminID, isPrivate)
+	if err != nil {
+		return "", err
+	}
 
-    // Добавляем админа
-    _, err = tx.Exec("INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')", newID, adminID)
-    if err != nil {
-        return "", err
-    }
+	_, err = tx.Exec("INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')", newID, adminID)
+	if err != nil {
+		return "", err
+	}
 
-    // Добавляем участников по username
-    for _, username := range members {
-        var userID string
-        err := tx.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", username).Scan(&userID)
-        if err != nil {
-            log.Printf("User not found by username: %s", username)
-            continue
-        }
-        if userID == adminID {
-            continue
-        }
-        _, err = tx.Exec("INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member')", newID, userID)
-        if err != nil {
-            log.Printf("Failed to add member %s: %v", username, err)
-        }
-    }
+	for _, username := range members {
+		var userID string
+		err := tx.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", username).Scan(&userID)
+		if err != nil {
+			log.Printf("User not found by username: %s", username)
+			continue
+		}
+		if userID == adminID {
+			continue
+		}
+		_, err = tx.Exec("INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member')", newID, userID)
+		if err != nil {
+			log.Printf("Failed to add member %s: %v", username, err)
+		}
+	}
 
-    return newID, tx.Commit()
+	return newID, tx.Commit()
 }
 
 func (r *Repository) GetChatParticipants(chatID string) ([]string, error) {
@@ -325,8 +323,6 @@ func (c *Repository) GetUserFromID(id string) (string, error) {
 	return username, nil
 }
 
-// DeleteMessage удаляет сообщение и обновляет last_message в чате/группе.
-// Возвращает chatID, новый last_message текст и sender username.
 func (r *Repository) DeleteMessage(messageID, senderID string) (chatID, newLastMsg, newLastUsername string, err error) {
 	err = r.db.QueryRow(
 		"DELETE FROM messages WHERE id=$1 AND sender_id=$2 RETURNING conversation_id",
@@ -336,7 +332,6 @@ func (r *Repository) DeleteMessage(messageID, senderID string) (chatID, newLastM
 		return "", "", "", fmt.Errorf("сообщение не найдено или нет прав")
 	}
 
-	// Находим новое последнее сообщение
 	var newLastSenderID string
 	dbErr := r.db.QueryRow(
 		`SELECT COALESCE(m.text,''), COALESCE(m.sender_id::text,'')
@@ -346,7 +341,7 @@ func (r *Repository) DeleteMessage(messageID, senderID string) (chatID, newLastM
 	).Scan(&newLastMsg, &newLastSenderID)
 
 	if dbErr != nil || newLastMsg == "" {
-		// Сообщений нет
+
 		r.db.Exec("UPDATE chats  SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", chatID)
 		r.db.Exec("UPDATE groups SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", chatID)
 		newLastMsg = ""
@@ -360,9 +355,8 @@ func (r *Repository) DeleteMessage(messageID, senderID string) (chatID, newLastM
 	return chatID, newLastMsg, newLastUsername, nil
 }
 
-// ClearChat удаляет все сообщения в чате.
 func (r *Repository) ClearChat(chatID, userID string) error {
-	// Проверяем что пользователь — участник чата или группы
+
 	var count int
 	r.db.QueryRow(
 		`SELECT COUNT(*) FROM chats WHERE id=$1 AND (user_id1=$2 OR user_id2=$2)`,
@@ -391,9 +385,8 @@ func (r *Repository) ClearChat(chatID, userID string) error {
 	return tx.Commit()
 }
 
-// DeleteChat удаляет чат и все его сообщения.
 func (r *Repository) DeleteChat(chatID, userID string) error {
-	// Личный чат
+
 	res, err := r.db.Exec(
 		"DELETE FROM chats WHERE id=$1 AND (user_id1=$2 OR user_id2=$2)",
 		chatID, userID,
@@ -407,7 +400,7 @@ func (r *Repository) DeleteChat(chatID, userID string) error {
 		msgCache.Delete(chatID)
 		return nil
 	}
-	// Группа — только admin может удалить
+
 	res, err = r.db.Exec(
 		"DELETE FROM groups WHERE id=$1 AND admin_id=$2",
 		chatID, userID,

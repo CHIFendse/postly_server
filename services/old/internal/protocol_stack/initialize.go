@@ -36,7 +36,6 @@ func Start() error {
 	authService = database.NewAuthService(db)
 	repo = database.NewRepository(db)
 
-	// Создаём таблицы друзей если их нет (идемпотентная миграция)
 	if err := database.MigrateFriends(db); err != nil {
 		log.Printf("MigrateFriends warning: %v", err)
 	}
@@ -48,14 +47,14 @@ func Start() error {
 	mux.HandleFunc("/getMessages", JWTMiddleware(handleGetMessages))
 	mux.HandleFunc("/addMessage", JWTMiddleware(handleAddMessage))
 	mux.HandleFunc("/ws", JWTMiddleware(handleWS))
-	// Message actions
+
 	mux.HandleFunc("/deleteMessage", JWTMiddleware(handleDeleteMessage))
-	// Friends
-	mux.HandleFunc("/sendFriendRequest",    JWTMiddleware(handleSendFriendRequest))
-	mux.HandleFunc("/getFriendRequests",    JWTMiddleware(handleGetFriendRequests))
-	mux.HandleFunc("/acceptFriendRequest",  JWTMiddleware(handleAcceptFriendRequest))
+
+	mux.HandleFunc("/sendFriendRequest", JWTMiddleware(handleSendFriendRequest))
+	mux.HandleFunc("/getFriendRequests", JWTMiddleware(handleGetFriendRequests))
+	mux.HandleFunc("/acceptFriendRequest", JWTMiddleware(handleAcceptFriendRequest))
 	mux.HandleFunc("/declineFriendRequest", JWTMiddleware(handleDeclineFriendRequest))
-	mux.HandleFunc("/getFriends",           JWTMiddleware(handleGetFriends))
+	mux.HandleFunc("/getFriends", JWTMiddleware(handleGetFriends))
 
 	server := &http.Server{
 		Addr:    "0.0.0.0:8081",
@@ -70,7 +69,6 @@ func Start() error {
 		return fmt.Errorf("failed to load TLS cert: %w", err)
 	}
 
-	// tcp4 to keep IPv4-only binding
 	listener, err := tls.Listen("tcp4", "0.0.0.0:8081", &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
 	})

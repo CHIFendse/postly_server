@@ -9,8 +9,6 @@ service FileService {
   
   rpc GetDownloadUrl(GetDownloadUrlRequest) returns (GetDownloadUrlResponse);
 
-  // Presigned PUT-ссылка для прямой загрузки клиентом в бакет.
-  // Ключ генерирует сервер: {folder}/{user_id}/{random}{ext}
   rpc GetUploadUrl(GetUploadUrlRequest) returns (GetUploadUrlResponse);
   
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);

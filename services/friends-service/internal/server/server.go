@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	friendspb "postly/proto/friends"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	friendspb "postly/proto/friends"
 )
 
 const wsPubPrefix = "ws:user:"
@@ -25,9 +25,6 @@ func New(db *sql.DB, cache *redis.Client) *Friends {
 	return &Friends{db: db, cache: cache}
 }
 
-// ─────────────────────────────────────────────────────────
-// DeleteFriend
-// ─────────────────────────────────────────────────────────
 func (s *Friends) DeleteFriend(ctx context.Context, req *friendspb.DeleteFriendReq) (*emptypb.Empty, error) {
 	u1, u2 := req.UserId1, req.UserId2
 	if u1 > u2 {
@@ -39,10 +36,9 @@ func (s *Friends) DeleteFriend(ctx context.Context, req *friendspb.DeleteFriendR
 		return nil, status.Error(codes.NotFound, "связь не найдена")
 	}
 
-	// Уведомляем обоих
 	for _, pair := range [][2]string{{req.UserId1, req.UserId2}, {req.UserId2, req.UserId1}} {
 		payload, _ := json.Marshal(map[string]string{
-			"type":      "DELETE_FRIEND",   // ← было DELETE_FRIend
+			"type":      "DELETE_FRIEND",
 			"friend_id": pair[1],
 		})
 		s.cache.Publish(ctx, wsPubPrefix+pair[0], payload)
@@ -51,9 +47,6 @@ func (s *Friends) DeleteFriend(ctx context.Context, req *friendspb.DeleteFriendR
 	return &emptypb.Empty{}, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// SendFriendRequest
-// ─────────────────────────────────────────────────────────
 func (s *Friends) SendFriendRequest(ctx context.Context, req *friendspb.SendFriendRequestReq) (*friendspb.SendFriendRequestResp, error) {
 	if req.SenderId == req.ReceiverId {
 		return nil, status.Error(codes.InvalidArgument, "нельзя добавить себя в друзья")
@@ -80,20 +73,16 @@ func (s *Friends) SendFriendRequest(ctx context.Context, req *friendspb.SendFrie
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// Уведомляем получателя
 	payload, _ := json.Marshal(map[string]string{
 		"type":       "FRIEND_REQUEST",
 		"sender_id":  req.SenderId,
-		"request_id": reqID,   // ← было req_id, фронт ждёт request_id
+		"request_id": reqID,
 	})
 	s.cache.Publish(ctx, wsPubPrefix+req.ReceiverId, payload)
 
 	return &friendspb.SendFriendRequestResp{RequestId: reqID, ReceiverId: req.ReceiverId}, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// GetFriendRequests
-// ─────────────────────────────────────────────────────────
 func (s *Friends) GetFriendRequests(ctx context.Context, req *friendspb.GetFriendRequestsReq) (*friendspb.GetFriendRequestsResp, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, sender_id, EXTRACT(EPOCH FROM created_at)::INT
@@ -116,9 +105,6 @@ func (s *Friends) GetFriendRequests(ctx context.Context, req *friendspb.GetFrien
 	return resp, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// AcceptFriendRequest
-// ─────────────────────────────────────────────────────────
 func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.AcceptFriendRequestReq) (*friendspb.AcceptFriendRequestResp, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -153,7 +139,6 @@ func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.Accept
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// Уведомляем обоих
 	for _, pair := range [][2]string{{senderID, req.UserId}, {req.UserId, senderID}} {
 		payload, _ := json.Marshal(map[string]string{
 			"type":      "FRIEND_ACCEPTED",
@@ -165,11 +150,8 @@ func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.Accept
 	return &friendspb.AcceptFriendRequestResp{SenderId: senderID}, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// DeclineFriendRequest (добавлена публикация)
-// ─────────────────────────────────────────────────────────
 func (s *Friends) DeclineFriendRequest(ctx context.Context, req *friendspb.DeclineFriendReq) (*friendspb.DeclineFriendResp, error) {
-	// 1. Узнаём отправителя заявки
+
 	var senderID string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT sender_id FROM friend_requests
@@ -180,7 +162,6 @@ func (s *Friends) DeclineFriendRequest(ctx context.Context, req *friendspb.Decli
 		return nil, status.Error(codes.NotFound, "заявка не найдена")
 	}
 
-	// 2. Отмечаем declined
 	_, err = s.db.ExecContext(ctx,
 		`UPDATE friend_requests SET status='declined' WHERE id=$1`,
 		req.RequestId,
@@ -189,7 +170,6 @@ func (s *Friends) DeclineFriendRequest(ctx context.Context, req *friendspb.Decli
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// 3. Уведомляем отправителя
 	payload, _ := json.Marshal(map[string]string{
 		"type":        "FRIEND_DECLINED",
 		"receiver_id": req.UserId,
@@ -199,11 +179,8 @@ func (s *Friends) DeclineFriendRequest(ctx context.Context, req *friendspb.Decli
 	return &friendspb.DeclineFriendResp{Ok: true}, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// CancelFriendRequest (добавлена публикация)
-// ─────────────────────────────────────────────────────────
 func (s *Friends) CancelFriendRequest(ctx context.Context, req *friendspb.DeclineFriendReq) (*friendspb.DeclineFriendResp, error) {
-	// 1. Узнаём получателя
+
 	var receiverID string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT receiver_id FROM friend_requests
@@ -214,7 +191,6 @@ func (s *Friends) CancelFriendRequest(ctx context.Context, req *friendspb.Declin
 		return nil, status.Error(codes.NotFound, "заявка не найдена")
 	}
 
-	// 2. Удаляем
 	_, err = s.db.ExecContext(ctx,
 		`DELETE FROM friend_requests WHERE id=$1`,
 		req.RequestId,
@@ -223,7 +199,6 @@ func (s *Friends) CancelFriendRequest(ctx context.Context, req *friendspb.Declin
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// 3. Уведомляем получателя
 	payload, _ := json.Marshal(map[string]string{
 		"type":      "FRIEND_REQUEST_CANCELED",
 		"sender_id": req.UserId,
@@ -233,9 +208,6 @@ func (s *Friends) CancelFriendRequest(ctx context.Context, req *friendspb.Declin
 	return &friendspb.DeclineFriendResp{Ok: true}, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// GetSentRequests
-// ─────────────────────────────────────────────────────────
 func (s *Friends) GetSentRequests(ctx context.Context, req *friendspb.GetFriendRequestsReq) (*friendspb.GetFriendRequestsResp, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, receiver_id, EXTRACT(EPOCH FROM created_at)::INT
@@ -258,9 +230,6 @@ func (s *Friends) GetSentRequests(ctx context.Context, req *friendspb.GetFriendR
 	return resp, nil
 }
 
-// ─────────────────────────────────────────────────────────
-// GetFriends
-// ─────────────────────────────────────────────────────────
 func (s *Friends) GetFriends(ctx context.Context, req *friendspb.GetFriendsReq) (*friendspb.GetFriendsResp, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT CASE WHEN user_id1=$1 THEN user_id2 ELSE user_id1 END

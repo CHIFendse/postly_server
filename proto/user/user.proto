@@ -10,15 +10,48 @@ service UserService {
     rpc GetUserByUsername(GetUserByUsernameRequest) returns (GetUserByUsernameResponse);
     rpc GetUserByUserId(GetUserByUserIdRequest)     returns (GetUserByUserIdResponse);
     rpc GetUserInfo(GetUserInfoRequest)             returns (GetUserInfoResponse);
+    rpc SetAvatar(SetAvatarRequest)                 returns (SetAvatarResponse);
+    rpc DeleteAvatar(DeleteAvatarRequest)           returns (DeleteAvatarResponse);
+    rpc GetAvatars(GetAvatarsRequest)               returns (GetAvatarsResponse);
+}
+
+message Avatar {
+    string s3_key = 1;
+    int64  created_at = 2;
+}
+message GetAvatarsRequest {
+    string user_id = 1;
+}
+
+message GetAvatarsResponse {
+    repeated Avatar avatars = 1;
+}
+message DeleteAvatarRequest {
+    string user_id = 1;
+    string s3_key  = 2;
+}
+
+message DeleteAvatarResponse {
+
+}
+
+
+message SetAvatarRequest {
+    string user_id = 1;
+    string s3_key  = 2;
+}
+
+message SetAvatarResponse {
+
 }
 
 message GetUserInfoRequest { string user_id = 1; }
-message GetUserInfoResponse { 
+message GetUserInfoResponse {
     string user_id = 1;
     string username = 2;
     string email = 3;
     string phone = 4;
-    string avatar_url = 5;
+    string s3_key = 5;
 }
 
 message GetUserByUsernameRequest  { string username = 1; }

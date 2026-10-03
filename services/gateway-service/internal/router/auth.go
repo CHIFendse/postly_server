@@ -12,7 +12,7 @@ import (
 )
 
 func RegisterAuth(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/login",  handleLogin(c))
+	mux.HandleFunc("/login", handleLogin(c))
 	mux.HandleFunc("/verify", handleVerify(c))
 }
 
@@ -50,14 +50,13 @@ func handleLogin(c *clients.Clients) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"token": tokenResp.Token,
-			"id":    userResp.UserId,
+			"token":    tokenResp.Token,
+			"id":       userResp.UserId,
 			"username": data.Username,
 		})
 	}
 }
 
-// /verify — клиент проверяет токен при старте приложения
 func handleVerify(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

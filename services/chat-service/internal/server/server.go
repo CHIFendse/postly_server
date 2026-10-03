@@ -33,8 +33,6 @@ func New(db *sql.DB, cache *redis.Client) *Chat {
 	return &Chat{db: db, cache: cache}
 }
 
-// ─── Chats ────────────────────────────────────────────────────────────────────
-
 func (c *Chat) GetChats(ctx context.Context, req *chatpb.GetChatsRequest) (*chatpb.GetChatsResponse, error) {
 	key := chatsKeyPrefix + req.UserId
 	if cached, err := c.cache.Get(ctx, key).Bytes(); err == nil {
@@ -44,7 +42,6 @@ func (c *Chat) GetChats(ctx context.Context, req *chatpb.GetChatsRequest) (*chat
 		}
 	}
 
-	// users нет в этой БД — возвращаем user_id2 как name, gateway резолвит username
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT c.id,
 		       CASE WHEN c.user_id1 = $1::uuid THEN c.user_id2::text ELSE c.user_id1::text END,
@@ -75,8 +72,8 @@ func (c *Chat) GetChats(ctx context.Context, req *chatpb.GetChatsRequest) (*chat
 }
 
 func (c *Chat) CreateChat(ctx context.Context, req *chatpb.CreateChatRequest) (*chatpb.CreateChatResponse, error) {
-	// target_user_id приходит от gateway (тот спросил user-service по username)
-	u1, u2 := req.UserId, req.TargetUsername // TargetUsername здесь уже UUID
+
+	u1, u2 := req.UserId, req.TargetUsername
 	if u1 > u2 {
 		u1, u2 = u2, u1
 	}
@@ -131,7 +128,6 @@ func (c *Chat) DeleteChat(ctx context.Context, req *chatpb.DeleteChatRequest) (*
 		return &chatpb.DeleteChatResponse{Ok: true}, nil
 	}
 
-	// Группа — только admin
 	res, err = c.db.ExecContext(ctx,
 		"DELETE FROM groups WHERE id=$1 AND admin_id=$2",
 		req.ChatId, req.UserId,
@@ -164,14 +160,11 @@ func (c *Chat) ClearChat(ctx context.Context, req *chatpb.ClearChatRequest) (*ch
 		return nil, status.Error(codes.PermissionDenied, "нет доступа к чату")
 	}
 
-	// Обнуляем last_message — удаление сообщений делает messaging-service
 	c.db.ExecContext(ctx, "UPDATE chats  SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", req.ChatId)
 	c.db.ExecContext(ctx, "UPDATE groups SET last_message=NULL, last_msg_sender=NULL WHERE id=$1", req.ChatId)
 	c.invalidateChat(ctx, req.ChatId, req.UserId)
 	return &chatpb.ClearChatResponse{Ok: true}, nil
 }
-
-// ─── Groups ───────────────────────────────────────────────────────────────────
 
 func (c *Chat) GetGroups(ctx context.Context, req *chatpb.GetGroupsRequest) (*chatpb.GetGroupsResponse, error) {
 	key := groupsKeyPrefix + req.UserId
@@ -239,7 +232,6 @@ func (c *Chat) CreateGroup(ctx context.Context, req *chatpb.CreateGroupRequest) 
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// members — уже UUID (gateway резолвит username → id через user-service)
 	for _, memberID := range req.Members {
 		if memberID == req.AdminId {
 			continue
@@ -256,7 +248,6 @@ func (c *Chat) CreateGroup(ctx context.Context, req *chatpb.CreateGroupRequest) 
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// Инвалидируем кеш групп для всех участников
 	cacheKeys := []string{groupsKeyPrefix + req.AdminId}
 	for _, memberID := range req.Members {
 		if memberID != req.AdminId {
@@ -267,8 +258,6 @@ func (c *Chat) CreateGroup(ctx context.Context, req *chatpb.CreateGroupRequest) 
 	return &chatpb.CreateGroupResponse{GroupId: newID}, nil
 }
 
-// ─── Participants ─────────────────────────────────────────────────────────────
-
 func (c *Chat) GetParticipants(ctx context.Context, req *chatpb.GetParticipantsRequest) (*chatpb.GetParticipantsResponse, error) {
 	key := participantsKeyPrefix + req.ChatId
 	if cached, err := c.cache.Get(ctx, key).Result(); err == nil {
@@ -278,7 +267,6 @@ func (c *Chat) GetParticipants(ctx context.Context, req *chatpb.GetParticipantsR
 		}
 	}
 
-	// Пробуем личный чат
 	var u1, u2 string
 	err := c.db.QueryRowContext(ctx,
 		"SELECT user_id1, user_id2 FROM chats WHERE id = $1", req.ChatId,
@@ -291,7 +279,6 @@ func (c *Chat) GetParticipants(ctx context.Context, req *chatpb.GetParticipantsR
 		return &chatpb.GetParticipantsResponse{UserIds: ids}, nil
 	}
 
-	// Группа
 	rows, err := c.db.QueryContext(ctx,
 		"SELECT user_id FROM group_members WHERE group_id = $1", req.ChatId,
 	)
@@ -313,8 +300,6 @@ func (c *Chat) GetParticipants(ctx context.Context, req *chatpb.GetParticipantsR
 	return &chatpb.GetParticipantsResponse{UserIds: ids}, nil
 }
 
-// ─── UpdateLastMessage (вызывается messaging-service) ────────────────────────
-
 func (c *Chat) UpdateLastMessage(ctx context.Context, req *chatpb.UpdateLastMessageRequest) (*chatpb.UpdateLastMessageResponse, error) {
 	c.db.ExecContext(ctx,
 		`UPDATE chats SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
@@ -324,7 +309,7 @@ func (c *Chat) UpdateLastMessage(ctx context.Context, req *chatpb.UpdateLastMess
 		`UPDATE groups SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
 		req.Text, req.SenderId, req.ChatId,
 	)
-	// Инвалидируем кеш для ВСЕХ участников, а не только отправителя
+
 	pts, err := c.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: req.ChatId})
 	if err == nil && len(pts.UserIds) > 0 {
 		keys := make([]string, 0, len(pts.UserIds)*2)
@@ -333,13 +318,11 @@ func (c *Chat) UpdateLastMessage(ctx context.Context, req *chatpb.UpdateLastMess
 		}
 		c.cache.Del(ctx, keys...)
 	} else {
-		// fallback: хотя бы отправитель
+
 		c.cache.Del(ctx, chatsKeyPrefix+req.SenderId, groupsKeyPrefix+req.SenderId)
 	}
 	return &chatpb.UpdateLastMessageResponse{Ok: true}, nil
 }
-
-// ─── Инвалидация кеша ─────────────────────────────────────────────────────────
 
 func (c *Chat) invalidateChat(ctx context.Context, chatID, userID string) {
 	c.cache.Del(ctx,

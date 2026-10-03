@@ -1,8 +1,5 @@
 services:
 
-  # ── Микросервисы ─────────────────────────────────────────────────────────────
-  # Postgres и Redis работают на хосте — контейнеры достукиваются через host-gateway.
-
   auth-service:
     build:
       context: .
@@ -90,8 +87,8 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
     ports:
-      - "8082:8082/udp"                    # DTLS — desktop клиент
-      - "10000-10200:10000-10200/udp"      # WebRTC ICE (pion ephemeral UDP)
+      - "8082:8082/udp"
+      - "10000-10200:10000-10200/udp"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -101,15 +98,13 @@ services:
     image: coturn/coturn:4
     restart: unless-stopped
     ports:
-      - "3478:3478/udp"                    # TURN allocation
-      - "3478:3478/tcp"                    # TURN over TCP (fallback)
-      - "49152-49250:49152-49250/udp"      # TURN relay data
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49152-49250:49152-49250/udp"
     volumes:
       - ./coturn.conf:/etc/turnserver.conf:ro
     networks:
       - internal
-
-  # ── Gateway — единственная точка входа из интернета ──────────────────────────
 
   gateway:
     build:
@@ -126,7 +121,7 @@ services:
       - "8081:8081"
     depends_on:
       - auth-service
-      - user-service  
+      - user-service
       - chat-service
       - messaging-service
       - friends-service
@@ -135,7 +130,6 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - internal
-
 
   s3-service:
     build:
@@ -151,9 +145,6 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - internal
-
-
-# ── Сеть ─────────────────────────────────────────────────────────────────────
 
 networks:
   internal:

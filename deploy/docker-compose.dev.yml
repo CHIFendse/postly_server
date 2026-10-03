@@ -1,0 +1,111 @@
+x-dev-db: &dev-db
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: postly
+  DB_PASSWORD: postly
+
+x-dev-redis: &dev-redis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""
+
+x-dev-depends: &dev-depends
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postly
+      POSTGRES_PASSWORD: postly
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./deploy/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+      - ./services/auth-service/db/init.sql:/schemas/auth-service.sql:ro
+      - ./services/user-service/db/init.sql:/schemas/user-service.sql:ro
+      - ./services/chat-service/db/init.sql:/schemas/chat-service.sql:ro
+      - ./services/messaging-service/db/init.sql:/schemas/messaging-service.sql:ro
+      - ./services/friends-service/db/init.sql:/schemas/friends-service.sql:ro
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postly -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks:
+      - internal
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks:
+      - internal
+
+  auth-service:
+    environment:
+      <<: [*dev-db, *dev-redis]
+    depends_on: *dev-depends
+
+  user-service:
+    environment:
+      <<: [*dev-db, *dev-redis]
+    depends_on: *dev-depends
+
+  chat-service:
+    environment:
+      <<: [*dev-db, *dev-redis]
+    depends_on: *dev-depends
+
+  messaging-service:
+    environment:
+      <<: [*dev-db, *dev-redis]
+    depends_on: *dev-depends
+
+  friends-service:
+    environment:
+      <<: [*dev-db, *dev-redis]
+    depends_on: *dev-depends
+
+  call-service:
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      WEBRTC_UDP_MIN: "10300"
+      WEBRTC_UDP_MAX: "10400"
+    ports: !override
+      - "18082:8082/udp"
+      - "10300-10400:10300-10400/udp"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  gateway:
+    environment:
+      <<: *dev-redis
+      TLS_CERT: ""
+      TLS_KEY: ""
+    ports: !override
+      - "18081:8081"
+
+  coturn:
+    profiles: ["prod"]
+
+volumes:
+  pgdata:
+  redisdata:

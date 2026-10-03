@@ -24,6 +24,9 @@ const (
 	UserService_GetUserByUsername_FullMethodName = "/user.UserService/GetUserByUsername"
 	UserService_GetUserByUserId_FullMethodName   = "/user.UserService/GetUserByUserId"
 	UserService_GetUserInfo_FullMethodName       = "/user.UserService/GetUserInfo"
+	UserService_SetAvatar_FullMethodName         = "/user.UserService/SetAvatar"
+	UserService_DeleteAvatar_FullMethodName      = "/user.UserService/DeleteAvatar"
+	UserService_GetAvatars_FullMethodName        = "/user.UserService/GetAvatars"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -35,6 +38,9 @@ type UserServiceClient interface {
 	GetUserByUsername(ctx context.Context, in *GetUserByUsernameRequest, opts ...grpc.CallOption) (*GetUserByUsernameResponse, error)
 	GetUserByUserId(ctx context.Context, in *GetUserByUserIdRequest, opts ...grpc.CallOption) (*GetUserByUserIdResponse, error)
 	GetUserInfo(ctx context.Context, in *GetUserInfoRequest, opts ...grpc.CallOption) (*GetUserInfoResponse, error)
+	SetAvatar(ctx context.Context, in *SetAvatarRequest, opts ...grpc.CallOption) (*SetAvatarResponse, error)
+	DeleteAvatar(ctx context.Context, in *DeleteAvatarRequest, opts ...grpc.CallOption) (*DeleteAvatarResponse, error)
+	GetAvatars(ctx context.Context, in *GetAvatarsRequest, opts ...grpc.CallOption) (*GetAvatarsResponse, error)
 }
 
 type userServiceClient struct {
@@ -95,6 +101,36 @@ func (c *userServiceClient) GetUserInfo(ctx context.Context, in *GetUserInfoRequ
 	return out, nil
 }
 
+func (c *userServiceClient) SetAvatar(ctx context.Context, in *SetAvatarRequest, opts ...grpc.CallOption) (*SetAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAvatarResponse)
+	err := c.cc.Invoke(ctx, UserService_SetAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) DeleteAvatar(ctx context.Context, in *DeleteAvatarRequest, opts ...grpc.CallOption) (*DeleteAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAvatarResponse)
+	err := c.cc.Invoke(ctx, UserService_DeleteAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) GetAvatars(ctx context.Context, in *GetAvatarsRequest, opts ...grpc.CallOption) (*GetAvatarsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAvatarsResponse)
+	err := c.cc.Invoke(ctx, UserService_GetAvatars_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -104,6 +140,9 @@ type UserServiceServer interface {
 	GetUserByUsername(context.Context, *GetUserByUsernameRequest) (*GetUserByUsernameResponse, error)
 	GetUserByUserId(context.Context, *GetUserByUserIdRequest) (*GetUserByUserIdResponse, error)
 	GetUserInfo(context.Context, *GetUserInfoRequest) (*GetUserInfoResponse, error)
+	SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error)
+	DeleteAvatar(context.Context, *DeleteAvatarRequest) (*DeleteAvatarResponse, error)
+	GetAvatars(context.Context, *GetAvatarsRequest) (*GetAvatarsResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -128,6 +167,15 @@ func (UnimplementedUserServiceServer) GetUserByUserId(context.Context, *GetUserB
 }
 func (UnimplementedUserServiceServer) GetUserInfo(context.Context, *GetUserInfoRequest) (*GetUserInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserInfo not implemented")
+}
+func (UnimplementedUserServiceServer) SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAvatar not implemented")
+}
+func (UnimplementedUserServiceServer) DeleteAvatar(context.Context, *DeleteAvatarRequest) (*DeleteAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAvatar not implemented")
+}
+func (UnimplementedUserServiceServer) GetAvatars(context.Context, *GetAvatarsRequest) (*GetAvatarsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAvatars not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -240,6 +288,60 @@ func _UserService_GetUserInfo_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SetAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetAvatar(ctx, req.(*SetAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_DeleteAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).DeleteAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_DeleteAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).DeleteAvatar(ctx, req.(*DeleteAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_GetAvatars_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAvatarsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetAvatars(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetAvatars_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetAvatars(ctx, req.(*GetAvatarsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +368,18 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUserInfo",
 			Handler:    _UserService_GetUserInfo_Handler,
+		},
+		{
+			MethodName: "SetAvatar",
+			Handler:    _UserService_SetAvatar_Handler,
+		},
+		{
+			MethodName: "DeleteAvatar",
+			Handler:    _UserService_DeleteAvatar_Handler,
+		},
+		{
+			MethodName: "GetAvatars",
+			Handler:    _UserService_GetAvatars_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

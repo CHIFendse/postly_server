@@ -3,10 +3,10 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"log"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"log"
+	"os"
 )
 
 func InitDB() (*sql.DB, error) {

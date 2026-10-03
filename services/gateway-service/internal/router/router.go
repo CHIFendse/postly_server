@@ -3,8 +3,8 @@ package router
 import (
 	"net/http"
 
-	"github.com/redis/go-redis/v9"
 	"gateway-service/internal/clients"
+	"github.com/redis/go-redis/v9"
 )
 
 func Setup(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
@@ -16,6 +16,6 @@ func Setup(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	RegisterFriends(mux, c)
 	RegisterWS(mux, c, cache)
 	RegisterGetVersion(mux, c)
-	// FCM-токен для push-уведомлений
+
 	mux.HandleFunc("/registerFCMToken", JWTMiddleware(c, handleRegisterFCMToken(cache)))
 }

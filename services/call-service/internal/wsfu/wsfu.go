@@ -1,7 +1,3 @@
-// Package wsfu implements a WebRTC SFU (Selective Forwarding Unit) that bridges
-// browser WebRTC connections through the server. Each client sends a CALL_OFFER
-// via WebSocket → gateway routes to Redis "callsfu:signal" → SFU answers with
-// CALL_ANSWER → ICE exchange → SFU forwards RTP audio between participants.
 package wsfu
 
 import (
@@ -24,11 +20,10 @@ type peer struct {
 	chatID    string
 }
 
-// SFU manages WebRTC peer connections and forwards audio between participants.
 type SFU struct {
 	mu         sync.RWMutex
-	rooms      map[string]map[string]*peer          // chatID → userID → peer
-	pendingICE map[string][]webrtc.ICECandidateInit // "chatID:userID" → buffered ICE candidates
+	rooms      map[string]map[string]*peer
+	pendingICE map[string][]webrtc.ICECandidateInit
 	api        *webrtc.API
 	rdb        *redis.Client
 }
@@ -39,9 +34,6 @@ func New(rdb *redis.Client) *SFU {
 		log.Fatalf("[SFU] RegisterDefaultCodecs: %v", err)
 	}
 
-	// Bind ICE to a fixed UDP port range so the firewall/Docker can expose it.
-	// Set WEBRTC_UDP_MIN / WEBRTC_UDP_MAX in env (default 10000-10100).
-	// Set WEBRTC_PUBLIC_IP to the server's public IP so host candidates are reachable.
 	se := webrtc.SettingEngine{}
 
 	minPort := envUint16("WEBRTC_UDP_MIN", 10000)
@@ -74,7 +66,6 @@ func envUint16(key string, fallback uint16) uint16 {
 	return fallback
 }
 
-// Run subscribes to Redis "callsfu:signal" and processes WebRTC signaling forever.
 func (s *SFU) Run(ctx context.Context) {
 	sub := s.rdb.Subscribe(ctx, "callsfu:signal")
 	defer sub.Close()
@@ -100,7 +91,6 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 		return
 	}
 
-	// Track the SFU sends TO this client (carries audio from the other participant).
 	sendTrack, err := webrtc.NewTrackLocalStaticRTP(
 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
 		"audio", "sfu-"+userID,
@@ -126,7 +116,6 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 		return
 	}
 
-	// When audio arrives FROM this client, forward to everyone else in the room.
 	pc.OnTrack(func(remote *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		log.Printf("[SFU] track from user=%s chat=%s codec=%s", userID, chatID, remote.Codec().MimeType)
 		for {
@@ -138,7 +127,6 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 		}
 	})
 
-	// Send SFU's ICE candidates to the client via ws:user:<userID>.
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c == nil {
 			return
@@ -161,16 +149,12 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 		}
 	})
 
-	// SetRemoteDescription MUST happen before AddICECandidate (pion requirement).
 	if err := pc.SetRemoteDescription(offer); err != nil {
 		log.Printf("[SFU] SetRemoteDescription: %v", err)
 		pc.Close()
 		return
 	}
 
-	// Register the peer NOW (after SetRemoteDescription) so handleICE can
-	// call AddICECandidate directly. Also drain any candidates that arrived
-	// before this moment (buffered in pendingICE).
 	peerKey := chatID + ":" + userID
 	s.mu.Lock()
 	if s.rooms[chatID] == nil {
@@ -198,16 +182,12 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 		return
 	}
 
-	// Apply buffered ICE candidates AFTER SetLocalDescription — pion's ICE agent
-	// starts only when SetLocalDescription is called (gatherer leaves "New" state).
-	// Candidates added before that are silently ignored by pion.
 	for _, cand := range buffered {
 		if err := pc.AddICECandidate(cand); err != nil {
 			log.Printf("[SFU] AddICECandidate (buffered) user=%s: %v", userID, err)
 		}
 	}
 
-	// Send the answer (trickle ICE: SFU candidates follow via OnICECandidate).
 	answerJSON, _ := json.Marshal(pc.LocalDescription())
 	payload, _ := json.Marshal(map[string]string{
 		"type":    "CALL_ANSWER",
@@ -227,8 +207,7 @@ func (s *SFU) handleICE(chatID, userID, candidateJSON string) {
 	s.mu.Lock()
 	p := s.rooms[chatID][userID]
 	if p == nil {
-		// Peer not registered yet (handleOffer hasn't reached SetRemoteDescription).
-		// Buffer the candidate — handleOffer will drain this after registration.
+
 		key := chatID + ":" + userID
 		s.pendingICE[key] = append(s.pendingICE[key], cand)
 		s.mu.Unlock()
@@ -236,13 +215,11 @@ func (s *SFU) handleICE(chatID, userID, candidateJSON string) {
 	}
 	s.mu.Unlock()
 
-	// Remote description is set (we register only after SetRemoteDescription).
 	if err := p.pc.AddICECandidate(cand); err != nil {
 		log.Printf("[SFU] AddICECandidate user=%s: %v", userID, err)
 	}
 }
 
-// forwardRTP writes an RTP packet from senderID to all other peers in the room.
 func (s *SFU) forwardRTP(chatID, senderID string, pkt *rtp.Packet) {
 	s.mu.RLock()
 	room := s.rooms[chatID]

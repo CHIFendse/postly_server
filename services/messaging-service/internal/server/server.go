@@ -93,9 +93,6 @@ func (s *Messaging) GetMessages(
 			)
 		}
 
-		// В file_url остаётся S3-ключ: наружу файл отдаёт gateway
-		// через /file с проверкой участника чата.
-
 		resp.Messages = append(
 			resp.Messages,
 			m,
@@ -128,8 +125,6 @@ func (s *Messaging) SendMessage(ctx context.Context, req *msgpb.SendMessageReque
 		req.Type = "text"
 	}
 
-	// Для файлов клиент уже загрузил объект в S3 по presigned-ссылке,
-	// в FileUrl лежит S3-ключ — сохраняем его как есть.
 	var fileURL, fileName, fileSize any
 	if req.Type != "text" {
 		if req.FileUrl == "" {
@@ -140,7 +135,7 @@ func (s *Messaging) SendMessage(ctx context.Context, req *msgpb.SendMessageReque
 		}
 		fileURL = req.FileUrl
 		fileName = req.FileName
-		// Колонка file_size — integer; мусор/пусто сохраняем как NULL
+
 		if n, err := strconv.ParseInt(req.FileSize, 10, 32); err == nil && n >= 0 {
 			fileSize = n
 		}
@@ -221,7 +216,6 @@ func (s *Messaging) DeleteMessage(ctx context.Context, req *msgpb.DeleteMessageR
 		return nil, status.Error(codes.NotFound, "сообщение не найдено или нет прав")
 	}
 
-	// Удаляем файл из S3
 	if fileURL != "" && msgType != "text" {
 		_, err := s.s3Client.DeleteFile(ctx, &s3pb.DeleteFileRequest{
 			S3Key: fileURL,
@@ -233,7 +227,6 @@ func (s *Messaging) DeleteMessage(ctx context.Context, req *msgpb.DeleteMessageR
 
 	s.cache.Del(ctx, msgCachePrefix+chatID)
 
-	// дальше твой существующий код
 	var lastText, lastSender, lastType string
 
 	err = s.db.QueryRowContext(ctx,
@@ -305,14 +298,12 @@ func (s *Messaging) DeleteChatMessages(ctx context.Context, req *msgpb.DeleteCha
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// Сначала удаляем файлы из S3
 	for _, fileURL := range files {
 		_, _ = s.s3Client.DeleteFile(ctx, &s3pb.DeleteFileRequest{
 			S3Key: fileURL,
 		})
 	}
 
-	// Потом удаляем сообщения из БД
 	_, err = s.db.ExecContext(ctx,
 		`DELETE FROM messages WHERE chat_id=$1`,
 		req.ChatId,

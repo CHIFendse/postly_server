@@ -2,22 +2,22 @@ package router
 
 import (
 	"encoding/json"
-	"net/http"
 	"fmt"
 	"gateway-service/internal/clients"
+	"net/http"
 	friendspb "postly/proto/friends"
 	userpb "postly/proto/user"
 )
 
 func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/sendFriendRequest",    JWTMiddleware(c, handleSendFriendRequest(c)))
-	mux.HandleFunc("/getFriendRequests",    JWTMiddleware(c, handleGetFriendRequests(c)))
-	mux.HandleFunc("/acceptFriendRequest",  JWTMiddleware(c, handleAcceptFriendRequest(c)))
+	mux.HandleFunc("/sendFriendRequest", JWTMiddleware(c, handleSendFriendRequest(c)))
+	mux.HandleFunc("/getFriendRequests", JWTMiddleware(c, handleGetFriendRequests(c)))
+	mux.HandleFunc("/acceptFriendRequest", JWTMiddleware(c, handleAcceptFriendRequest(c)))
 	mux.HandleFunc("/declineFriendRequest", JWTMiddleware(c, handleDeclineFriendRequest(c)))
-	mux.HandleFunc("/getFriends",            JWTMiddleware(c, handleGetFriends(c)))
-	mux.HandleFunc("/deleteFriend",          JWTMiddleware(c, handleDeleteFriend(c)))
-	mux.HandleFunc("/cancelFriendRequest",   JWTMiddleware(c, handleCancelFriendRequest(c)))
-	mux.HandleFunc("/getSentRequests",       JWTMiddleware(c, handleGetSentRequests(c)))
+	mux.HandleFunc("/getFriends", JWTMiddleware(c, handleGetFriends(c)))
+	mux.HandleFunc("/deleteFriend", JWTMiddleware(c, handleDeleteFriend(c)))
+	mux.HandleFunc("/cancelFriendRequest", JWTMiddleware(c, handleCancelFriendRequest(c)))
+	mux.HandleFunc("/getSentRequests", JWTMiddleware(c, handleGetSentRequests(c)))
 }
 
 func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
@@ -44,7 +44,7 @@ func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 			resp, err := c.User.GetUserByUsername(r.Context(), &userpb.GetUserByUsernameRequest{Username: data.FriendId})
 			if err != nil {
 				w.WriteHeader(http.StatusConflict)
-				json.NewEncoder(w).Encode(map[string]string{"success":"error", "message": err.Error()})
+				json.NewEncoder(w).Encode(map[string]string{"success": "error", "message": err.Error()})
 				fmt.Printf("Error from GetUserByUsername, data: %s\n", data.FriendId)
 				return
 			}
@@ -54,10 +54,10 @@ func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 			})
 			if err != nil {
 				w.WriteHeader(http.StatusConflict)
-				json.NewEncoder(w).Encode(map[string]string{"success":"error", "message": err.Error()})
+				json.NewEncoder(w).Encode(map[string]string{"success": "error", "message": err.Error()})
 				fmt.Printf("Error from DeleteFriend, data: %s\n", resp.UserId)
 			}
-			
+
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"success": "ok"})
@@ -285,7 +285,7 @@ func handleGetSentRequests(c *clients.Clients) http.HandlerFunc {
 		}
 		out := make([]reqOut, 0, len(resp.Requests))
 		for _, req := range resp.Requests {
-			// SenderId содержит receiver_id (см. GetSentRequests в friends-service)
+
 			username := req.SenderId
 			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: req.SenderId}); err == nil {
 				username = u.Username
