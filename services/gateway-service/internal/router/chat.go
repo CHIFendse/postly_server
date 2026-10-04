@@ -7,9 +7,10 @@ import (
 	"net/http"
 
 	"gateway-service/internal/clients"
-	"github.com/redis/go-redis/v9"
 	chatpb "postly/proto/chat"
 	userpb "postly/proto/user"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
@@ -35,34 +36,45 @@ func handleGetChats(c *clients.Clients) http.HandlerFunc {
 
 		type chatOut struct {
 			Id          string `json:"id"`
+			UserID      string `json:"user_id"`
 			Name        string `json:"name"`
 			LastMessage string `json:"last_message"`
 			Username    string `json:"username"`
+			AvatarURL   string `json:"avatar_url"`
 			UpdatedAt   int64  `json:"updated_at"`
 		}
 
-		resolved := map[string]string{}
-		resolve := func(uid string) string {
+		type userOut struct {
+			username  string
+			avatarURL string
+		}
+		resolved := map[string]userOut{}
+		resolve := func(uid string) userOut {
 			if uid == "" {
-				return ""
+				return userOut{}
 			}
 			if v, ok := resolved[uid]; ok {
 				return v
 			}
 			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: uid}); err == nil {
-				resolved[uid] = u.Username
-				return u.Username
+				result := userOut{username: u.Username, avatarURL: avatarURLForUser(uid)}
+				resolved[uid] = result
+				return result
 			}
-			return ""
+			return userOut{}
 		}
 
 		out := make([]chatOut, 0, len(resp.Chats))
 		for _, ch := range resp.Chats {
+			chatUser := resolve(ch.Name)
+			lastMessageUser := resolve(ch.LastMsgSender)
 			out = append(out, chatOut{
 				Id:          ch.Id,
-				Name:        resolve(ch.Name),
+				UserID:      ch.Name,
+				Name:        chatUser.username,
 				LastMessage: ch.LastMessage,
-				Username:    resolve(ch.LastMsgSender),
+				Username:    lastMessageUser.username,
+				AvatarURL:   chatUser.avatarURL,
 				UpdatedAt:   ch.UpdatedAt,
 			})
 		}

@@ -122,6 +122,7 @@ func handleGetFriendRequests(c *clients.Clients) http.HandlerFunc {
 			Id        string `json:"id"`
 			SenderId  string `json:"sender_id"`
 			Username  string `json:"username"`
+			AvatarURL string `json:"avatar_url"`
 			CreatedAt int64  `json:"created_at"`
 		}
 		out := make([]reqOut, 0, len(resp.Requests))
@@ -131,10 +132,12 @@ func handleGetFriendRequests(c *clients.Clients) http.HandlerFunc {
 			if err == nil {
 				username = u.Username
 			}
+			avatarURL := avatarURLForUser(req.SenderId)
 			out = append(out, reqOut{
 				Id:        req.Id,
 				SenderId:  req.SenderId,
 				Username:  username,
+				AvatarURL: avatarURL,
 				CreatedAt: req.CreatedAt,
 			})
 		}
@@ -218,8 +221,9 @@ func handleGetFriends(c *clients.Clients) http.HandlerFunc {
 		}
 
 		type friendOut struct {
-			Id       string `json:"id"`
-			Username string `json:"username"`
+			Id        string `json:"id"`
+			Username  string `json:"username"`
+			AvatarURL string `json:"avatar_url"`
 		}
 		out := make([]friendOut, 0, len(resp.Friends))
 		for _, f := range resp.Friends {
@@ -227,7 +231,8 @@ func handleGetFriends(c *clients.Clients) http.HandlerFunc {
 			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: f.UserId}); err == nil {
 				username = u.Username
 			}
-			out = append(out, friendOut{Id: f.UserId, Username: username})
+			avatarURL := avatarURLForUser(f.UserId)
+			out = append(out, friendOut{Id: f.UserId, Username: username, AvatarURL: avatarURL})
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -281,6 +286,7 @@ func handleGetSentRequests(c *clients.Clients) http.HandlerFunc {
 			Id         string `json:"id"`
 			ReceiverId string `json:"receiver_id"`
 			Username   string `json:"username"`
+			AvatarURL  string `json:"avatar_url"`
 			CreatedAt  int64  `json:"created_at"`
 		}
 		out := make([]reqOut, 0, len(resp.Requests))
@@ -290,10 +296,12 @@ func handleGetSentRequests(c *clients.Clients) http.HandlerFunc {
 			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: req.SenderId}); err == nil {
 				username = u.Username
 			}
+			avatarURL := avatarURLForUser(req.SenderId)
 			out = append(out, reqOut{
 				Id:         req.Id,
 				ReceiverId: req.SenderId,
 				Username:   username,
+				AvatarURL:  avatarURL,
 				CreatedAt:  req.CreatedAt,
 			})
 		}

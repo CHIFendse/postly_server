@@ -26,7 +26,17 @@ func RegisterUser(mux *http.ServeMux, c *clients.Clients) {
 	mux.HandleFunc("/avatar", handleAvatar(c))
 }
 
-func avatarURLFor(key string) string {
+func avatarURLForUser(userID string) string {
+	if userID == "" {
+		return ""
+	}
+	return "/avatar?user_id=" + url.QueryEscape(userID)
+}
+
+func avatarURLForKey(key string) string {
+	if key == "" {
+		return ""
+	}
 	return "/avatar?key=" + url.QueryEscape(key)
 }
 
@@ -124,7 +134,7 @@ func handleSetAvatar(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"avatar_url": avatarURLFor(data.S3Key)})
+		writeJSON(w, http.StatusOK, map[string]string{"avatar_url": avatarURLForUser(userID)})
 	}
 }
 
@@ -190,7 +200,7 @@ func handleGetAvatars(c *clients.Clients) http.HandlerFunc {
 		out := make([]avatarOut, 0, len(resp.Avatars))
 		for _, a := range resp.Avatars {
 			out = append(out, avatarOut{
-				URL:       avatarURLFor(a.S3Key),
+				URL:       avatarURLForKey(a.S3Key),
 				S3Key:     a.S3Key,
 				CreatedAt: a.CreatedAt * 1000,
 			})
