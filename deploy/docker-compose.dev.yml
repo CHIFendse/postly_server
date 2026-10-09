@@ -89,7 +89,6 @@ services:
       WEBRTC_UDP_MIN: "10300"
       WEBRTC_UDP_MAX: "10400"
     ports: !override
-      - "18082:8082/udp"
       - "10300-10400:10300-10400/udp"
     depends_on:
       redis:

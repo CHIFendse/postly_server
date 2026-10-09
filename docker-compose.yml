@@ -83,11 +83,7 @@ services:
         SERVICE: call-service
     restart: unless-stopped
     env_file: ./services/call-service/cmd/.env
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-
     ports:
-      - "8082:8082/udp"
       - "10000-10200:10000-10200/udp"
     extra_hosts:
       - "host.docker.internal:host-gateway"

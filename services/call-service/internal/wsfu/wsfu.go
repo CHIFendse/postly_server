@@ -3,57 +3,68 @@ package wsfu
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
+	"maps"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
-	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
 	"github.com/redis/go-redis/v9"
 )
 
+const maxPeersPerRoom = 16
+
 type peer struct {
-	pc        *webrtc.PeerConnection
-	sendTrack *webrtc.TrackLocalStaticRTP
-	userID    string
-	chatID    string
+	userID string
+	pc     *webrtc.PeerConnection
+
+	mu         sync.Mutex
+	needsOffer bool
+	pendingICE []webrtc.ICECandidateInit
+}
+
+type room struct {
+	peers  map[string]*peer
+	tracks map[string]*webrtc.TrackLocalStaticRTP
 }
 
 type SFU struct {
-	mu         sync.RWMutex
-	rooms      map[string]map[string]*peer
-	pendingICE map[string][]webrtc.ICECandidateInit
-	api        *webrtc.API
-	rdb        *redis.Client
+	mu    sync.Mutex
+	rooms map[string]*room
+	api   *webrtc.API
+	rdb   *redis.Client
+	ctx   context.Context
 }
 
-func New(rdb *redis.Client) *SFU {
+func New(ctx context.Context, rdb *redis.Client) *SFU {
 	m := &webrtc.MediaEngine{}
 	if err := m.RegisterDefaultCodecs(); err != nil {
 		log.Fatalf("[SFU] RegisterDefaultCodecs: %v", err)
 	}
 
 	se := webrtc.SettingEngine{}
-
 	minPort := envUint16("WEBRTC_UDP_MIN", 10000)
-	maxPort := envUint16("WEBRTC_UDP_MAX", 10100)
+	maxPort := envUint16("WEBRTC_UDP_MAX", 10200)
 	if err := se.SetEphemeralUDPPortRange(minPort, maxPort); err != nil {
 		log.Fatalf("[SFU] SetEphemeralUDPPortRange: %v", err)
 	}
-
-	if publicIP := os.Getenv("WEBRTC_PUBLIC_IP"); publicIP != "" {
-		se.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
-		log.Printf("[SFU] NAT1To1IP=%s ports=%d-%d", publicIP, minPort, maxPort)
-	} else {
-		log.Printf("[SFU] WEBRTC_PUBLIC_IP not set — STUN reflexive only (ports %d-%d)", minPort, maxPort)
+	publicIP := os.Getenv("WEBRTC_PUBLIC_IP")
+	if publicIP == "" {
+		log.Fatal("[SFU] WEBRTC_PUBLIC_IP is required")
 	}
+	se.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
+	log.Printf("[SFU] public ip=%s ports=%d-%d", publicIP, minPort, maxPort)
 
 	return &SFU{
-		rooms:      make(map[string]map[string]*peer),
-		pendingICE: make(map[string][]webrtc.ICECandidateInit),
-		api:        webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(se)),
-		rdb:        rdb,
+		rooms: make(map[string]*room),
+		api:   webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(se)),
+		rdb:   rdb,
+		ctx:   ctx,
 	}
 }
 
@@ -66,212 +77,350 @@ func envUint16(key string, fallback uint16) uint16 {
 	return fallback
 }
 
-func (s *SFU) Run(ctx context.Context) {
-	sub := s.rdb.Subscribe(ctx, "callsfu:signal")
+func (s *SFU) Run() {
+	sub := s.rdb.Subscribe(s.ctx, "callsfu:signal")
 	defer sub.Close()
+	ch := sub.Channel()
 	log.Println("[SFU] listening on callsfu:signal")
-	for msg := range sub.Channel() {
-		var data map[string]string
-		if err := json.Unmarshal([]byte(msg.Payload), &data); err != nil {
-			continue
-		}
-		switch data["type"] {
-		case "CALL_OFFER":
-			go s.handleOffer(ctx, data["chat_id"], data["user_id"], data["sdp"])
-		case "CALL_ICE":
-			go s.handleICE(data["chat_id"], data["user_id"], data["candidate"])
-		case "CALL_HANGUP":
-			go s.handleHangup(data["chat_id"], data["user_id"])
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			var d map[string]string
+			if err := json.Unmarshal([]byte(msg.Payload), &d); err != nil {
+				continue
+			}
+			chatID, userID := d["chat_id"], d["user_id"]
+			if chatID == "" || userID == "" {
+				continue
+			}
+			switch d["type"] {
+			case "CALL_JOIN":
+				s.join(chatID, userID)
+			case "CALL_ANSWER":
+				s.answer(chatID, userID, d["sdp"])
+			case "CALL_ICE":
+				s.ice(chatID, userID, d["candidate"])
+			case "CALL_HANGUP":
+				s.leave(chatID, userID)
+			}
 		}
 	}
 }
 
-func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
-	var offer webrtc.SessionDescription
-	if err := json.Unmarshal([]byte(sdpJSON), &offer); err != nil {
-		log.Printf("[SFU] bad sdp from %s: %v", userID, err)
+func (s *SFU) join(chatID, userID string) {
+	s.leave(chatID, userID)
+
+	s.mu.Lock()
+	full := s.rooms[chatID] != nil && len(s.rooms[chatID].peers) >= maxPeersPerRoom
+	s.mu.Unlock()
+	if full {
+		s.send(userID, map[string]string{"type": "CALL_ERROR", "chat_id": chatID, "error": "Комната заполнена"})
 		return
 	}
 
-	sendTrack, err := webrtc.NewTrackLocalStaticRTP(
-		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
-		"audio", "sfu-"+userID,
-	)
+	pc, err := s.api.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		log.Printf("[SFU] NewPeerConnection: %v", err)
+		return
+	}
+	if _, err := pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
+		Direction: webrtc.RTPTransceiverDirectionRecvonly,
+	}); err != nil {
+		log.Printf("[SFU] AddTransceiver: %v", err)
+		pc.Close()
+		return
+	}
+
+	p := &peer{userID: userID, pc: pc}
+
+	pc.OnTrack(func(remote *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+		s.relay(chatID, userID, remote)
+	})
+	pc.OnConnectionStateChange(func(st webrtc.PeerConnectionState) {
+		log.Printf("[SFU] user=%s chat=%s state=%s", userID, chatID, st)
+		if st == webrtc.PeerConnectionStateFailed || st == webrtc.PeerConnectionStateClosed {
+			s.removePeer(chatID, userID, pc)
+		}
+	})
+
+	s.mu.Lock()
+	r := s.rooms[chatID]
+	if r == nil {
+		r = &room{peers: map[string]*peer{}, tracks: map[string]*webrtc.TrackLocalStaticRTP{}}
+		s.rooms[chatID] = r
+	}
+	r.peers[userID] = p
+	s.mu.Unlock()
+
+	log.Printf("[SFU] joined user=%s chat=%s", userID, chatID)
+	s.negotiate(chatID, p)
+	s.broadcastPeers(chatID)
+}
+
+func (s *SFU) relay(chatID, userID string, remote *webrtc.TrackRemote) {
+	if remote.Kind() != webrtc.RTPCodecTypeAudio {
+		return
+	}
+	local, err := webrtc.NewTrackLocalStaticRTP(remote.Codec().RTPCodecCapability, "audio-"+userID, "user-"+userID)
 	if err != nil {
 		log.Printf("[SFU] NewTrackLocalStaticRTP: %v", err)
 		return
 	}
 
-	pc, err := s.api.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:stun.l.google.com:19302"}},
-		},
-	})
-	if err != nil {
-		log.Printf("[SFU] NewPeerConnection: %v", err)
-		return
-	}
-
-	if _, err := pc.AddTrack(sendTrack); err != nil {
-		log.Printf("[SFU] AddTrack: %v", err)
-		pc.Close()
-		return
-	}
-
-	pc.OnTrack(func(remote *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		log.Printf("[SFU] track from user=%s chat=%s codec=%s", userID, chatID, remote.Codec().MimeType)
-		if remote.Kind() != webrtc.RTPCodecTypeAudio {
-			log.Printf("[SFU] ignoring video track from user=%s", userID)
-			return
-		}
-		for {
-			pkt, _, err := remote.ReadRTP()
-			if err != nil {
-				return
-			}
-			s.forwardRTP(chatID, userID, pkt)
-		}
-	})
-
-	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
-		if c == nil {
-			return
-		}
-		candJSON, _ := json.Marshal(c.ToJSON())
-		payload, _ := json.Marshal(map[string]string{
-			"type":      "CALL_ICE",
-			"chat_id":   chatID,
-			"candidate": string(candJSON),
-		})
-		s.rdb.Publish(ctx, "ws:user:"+userID, string(payload))
-	})
-
-	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		log.Printf("[SFU] user=%s chat=%s state→%s", userID, chatID, state)
-		if state == webrtc.PeerConnectionStateFailed ||
-			state == webrtc.PeerConnectionStateClosed {
-			s.removePeer(chatID, userID, pc)
-		}
-	})
-
-	if err := pc.SetRemoteDescription(offer); err != nil {
-		log.Printf("[SFU] SetRemoteDescription: %v", err)
-		s.mu.Lock()
-		delete(s.pendingICE, chatID+":"+userID)
-		s.mu.Unlock()
-		pc.Close()
-		return
-	}
-
-	peerKey := chatID + ":" + userID
 	s.mu.Lock()
-	if s.rooms[chatID] == nil {
-		s.rooms[chatID] = make(map[string]*peer)
+	r := s.rooms[chatID]
+	if r == nil {
+		s.mu.Unlock()
+		return
 	}
-	old := s.rooms[chatID][userID]
-
-	s.rooms[chatID][userID] = &peer{pc: pc, sendTrack: sendTrack, userID: userID, chatID: chatID}
-	buffered := s.pendingICE[peerKey]
-	delete(s.pendingICE, peerKey)
+	r.tracks[userID] = local
 	s.mu.Unlock()
-	if old != nil {
-		old.pc.Close()
+	s.renegotiateAll(chatID)
+
+	defer func() {
+		s.mu.Lock()
+		if r := s.rooms[chatID]; r != nil && r.tracks[userID] == local {
+			delete(r.tracks, userID)
+		}
+		s.mu.Unlock()
+		s.renegotiateAll(chatID)
+	}()
+
+	buf := make([]byte, 1500)
+	for {
+		n, _, err := remote.Read(buf)
+		if err != nil {
+			return
+		}
+		if _, err := local.Write(buf[:n]); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			return
+		}
+	}
+}
+
+func (s *SFU) negotiate(chatID string, p *peer) {
+	s.mu.Lock()
+	var tracks map[string]*webrtc.TrackLocalStaticRTP
+	if r := s.rooms[chatID]; r != nil {
+		tracks = maps.Clone(r.tracks)
+	}
+	s.mu.Unlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.pc.ConnectionState() == webrtc.PeerConnectionStateClosed {
+		return
 	}
 
-	answer, err := pc.CreateAnswer(nil)
+	sending := map[string]bool{}
+	for _, sender := range p.pc.GetSenders() {
+		t := sender.Track()
+		if t == nil {
+			continue
+		}
+		owner := strings.TrimPrefix(t.StreamID(), "user-")
+		if cur, ok := tracks[owner]; !ok || webrtc.TrackLocal(cur) != t {
+			if err := p.pc.RemoveTrack(sender); err != nil {
+				log.Printf("[SFU] RemoveTrack user=%s: %v", p.userID, err)
+			}
+			continue
+		}
+		sending[owner] = true
+	}
+	for owner, t := range tracks {
+		if owner == p.userID || sending[owner] {
+			continue
+		}
+		sender, err := p.pc.AddTrack(t)
+		if err != nil {
+			log.Printf("[SFU] AddTrack user=%s: %v", p.userID, err)
+			continue
+		}
+		go drainRTCP(sender)
+	}
+
+	if p.pc.SignalingState() != webrtc.SignalingStateStable {
+		p.needsOffer = true
+		return
+	}
+	p.needsOffer = false
+
+	offer, err := p.pc.CreateOffer(nil)
 	if err != nil {
-		log.Printf("[SFU] CreateAnswer: %v", err)
-		s.removePeer(chatID, userID, pc)
+		log.Printf("[SFU] CreateOffer user=%s: %v", p.userID, err)
 		return
 	}
-	if err := pc.SetLocalDescription(answer); err != nil {
-		log.Printf("[SFU] SetLocalDescription: %v", err)
-		s.removePeer(chatID, userID, pc)
+	gathered := webrtc.GatheringCompletePromise(p.pc)
+	if err := p.pc.SetLocalDescription(offer); err != nil {
+		log.Printf("[SFU] SetLocalDescription user=%s: %v", p.userID, err)
+		return
+	}
+	select {
+	case <-gathered:
+	case <-time.After(3 * time.Second):
+		log.Printf("[SFU] ICE gathering timeout user=%s", p.userID)
+	}
+
+	sdp, _ := json.Marshal(p.pc.LocalDescription())
+	s.send(p.userID, map[string]string{"type": "CALL_OFFER", "chat_id": chatID, "sdp": string(sdp)})
+}
+
+func (s *SFU) answer(chatID, userID, sdpJSON string) {
+	p := s.peer(chatID, userID)
+	if p == nil {
+		return
+	}
+	var ans webrtc.SessionDescription
+	if err := json.Unmarshal([]byte(sdpJSON), &ans); err != nil {
+		log.Printf("[SFU] bad answer from %s: %v", userID, err)
 		return
 	}
 
-	for _, cand := range buffered {
-		if err := pc.AddICECandidate(cand); err != nil {
+	p.mu.Lock()
+	if err := p.pc.SetRemoteDescription(ans); err != nil {
+		p.mu.Unlock()
+		log.Printf("[SFU] SetRemoteDescription user=%s: %v", userID, err)
+		return
+	}
+	for _, c := range p.pendingICE {
+		if err := p.pc.AddICECandidate(c); err != nil {
 			log.Printf("[SFU] AddICECandidate (buffered) user=%s: %v", userID, err)
 		}
 	}
+	p.pendingICE = nil
+	again := p.needsOffer
+	p.mu.Unlock()
 
-	answerJSON, _ := json.Marshal(pc.LocalDescription())
-	payload, _ := json.Marshal(map[string]string{
-		"type":    "CALL_ANSWER",
-		"chat_id": chatID,
-		"sdp":     string(answerJSON),
-	})
-	s.rdb.Publish(ctx, "ws:user:"+userID, string(payload))
-	log.Printf("[SFU] answered user=%s chat=%s", userID, chatID)
+	if again {
+		s.negotiate(chatID, p)
+	}
 }
 
-func (s *SFU) handleICE(chatID, userID, candidateJSON string) {
-	var cand webrtc.ICECandidateInit
-	if err := json.Unmarshal([]byte(candidateJSON), &cand); err != nil {
-		return
-	}
-
-	s.mu.Lock()
-	p := s.rooms[chatID][userID]
+func (s *SFU) ice(chatID, userID, candJSON string) {
+	p := s.peer(chatID, userID)
 	if p == nil {
-
-		key := chatID + ":" + userID
-		s.pendingICE[key] = append(s.pendingICE[key], cand)
-		s.mu.Unlock()
 		return
 	}
-	s.mu.Unlock()
+	var c webrtc.ICECandidateInit
+	if err := json.Unmarshal([]byte(candJSON), &c); err != nil {
+		return
+	}
 
-	if err := p.pc.AddICECandidate(cand); err != nil {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.pc.RemoteDescription() == nil {
+		if len(p.pendingICE) < 50 {
+			p.pendingICE = append(p.pendingICE, c)
+		}
+		return
+	}
+	if err := p.pc.AddICECandidate(c); err != nil {
 		log.Printf("[SFU] AddICECandidate user=%s: %v", userID, err)
 	}
 }
 
-func (s *SFU) forwardRTP(chatID, senderID string, pkt *rtp.Packet) {
-	s.mu.RLock()
-	room := s.rooms[chatID]
-	targets := make([]*peer, 0, len(room))
-	for uid, p := range room {
-		if uid != senderID {
-			targets = append(targets, p)
-		}
-	}
-	s.mu.RUnlock()
-
-	for _, p := range targets {
-		out := *pkt
-		if err := p.sendTrack.WriteRTP(&out); err != nil {
-			log.Printf("[SFU] forward→%s: %v", p.userID, err)
-		}
+func (s *SFU) leave(chatID, userID string) {
+	if p := s.peer(chatID, userID); p != nil {
+		s.removePeer(chatID, userID, p.pc)
 	}
 }
 
 func (s *SFU) removePeer(chatID, userID string, pc *webrtc.PeerConnection) {
 	s.mu.Lock()
-
-	if room := s.rooms[chatID]; room != nil {
-		if p, ok := room[userID]; ok && p.pc == pc {
-			delete(room, userID)
-			delete(s.pendingICE, chatID+":"+userID)
-			log.Printf("[SFU] removed user=%s chat=%s", userID, chatID)
-		}
-		if len(room) == 0 {
-			delete(s.rooms, chatID)
+	removed := false
+	if r := s.rooms[chatID]; r != nil {
+		if p := r.peers[userID]; p != nil && p.pc == pc {
+			delete(r.peers, userID)
+			removed = true
+			if len(r.peers) == 0 {
+				delete(s.rooms, chatID)
+			}
 		}
 	}
-
 	s.mu.Unlock()
+
 	pc.Close()
+	if removed {
+		log.Printf("[SFU] removed user=%s chat=%s", userID, chatID)
+		s.renegotiateAll(chatID)
+		s.broadcastPeers(chatID)
+	}
 }
 
-func (s *SFU) handleHangup(chatID, userID string) {
-	s.mu.RLock()
-	p := s.rooms[chatID][userID]
-	s.mu.RUnlock()
-
-	if p != nil {
-		s.removePeer(chatID, userID, p.pc)
+func (s *SFU) renegotiateAll(chatID string) {
+	s.mu.Lock()
+	var peers []*peer
+	if r := s.rooms[chatID]; r != nil {
+		for _, p := range r.peers {
+			peers = append(peers, p)
+		}
 	}
+	s.mu.Unlock()
 
+	for _, p := range peers {
+		s.negotiate(chatID, p)
+	}
+}
+
+func (s *SFU) broadcastPeers(chatID string) {
+	s.mu.Lock()
+	var ids []string
+	if r := s.rooms[chatID]; r != nil {
+		for id := range r.peers {
+			ids = append(ids, id)
+		}
+	}
+	s.mu.Unlock()
+
+	msg := map[string]string{"type": "CALL_PEERS", "chat_id": chatID, "user_ids": strings.Join(ids, ",")}
+	for _, id := range ids {
+		s.send(id, msg)
+	}
+}
+
+func (s *SFU) peer(chatID, userID string) *peer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r := s.rooms[chatID]; r != nil {
+		return r.peers[userID]
+	}
+	return nil
+}
+
+func (s *SFU) send(userID string, msg map[string]string) {
+	b, _ := json.Marshal(msg)
+	if err := s.rdb.Publish(s.ctx, "ws:user:"+userID, b).Err(); err != nil {
+		log.Printf("[SFU] publish to %s: %v", userID, err)
+	}
+}
+
+func drainRTCP(sender *webrtc.RTPSender) {
+	buf := make([]byte, 1500)
+	for {
+		if _, _, err := sender.Read(buf); err != nil {
+			return
+		}
+	}
+}
+
+func (s *SFU) Close() {
+	s.mu.Lock()
+	var pcs []*webrtc.PeerConnection
+	for _, r := range s.rooms {
+		for _, p := range r.peers {
+			pcs = append(pcs, p.pc)
+		}
+	}
+	s.rooms = map[string]*room{}
+	s.mu.Unlock()
+
+	for _, pc := range pcs {
+		pc.Close()
+	}
 }

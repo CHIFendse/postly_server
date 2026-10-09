@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -47,6 +46,7 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 			return
 		}
 		defer conn.Close()
+		conn.SetReadLimit(256 << 10)
 
 		sub := cache.Subscribe(r.Context(), "ws:user:"+userID)
 		defer sub.Close()
@@ -59,13 +59,7 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 					sub.Close()
 					return
 				}
-				go handleIncoming(
-					raw,
-					userID,
-					c.Messaging,
-					c.Chat,
-					cache,
-				)
+				handleIncoming(raw, userID, c, cache)
 			}
 		}()
 
@@ -81,10 +75,10 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 func handleIncoming(
 	raw []byte,
 	senderID string,
-	msgSvc msgpb.MessagingServiceClient,
-	chatSvc chatpb.ChatServiceClient,
+	c *clients.Clients,
 	cache *redis.Client,
 ) {
+	msgSvc, chatSvc := c.Messaging, c.Chat
 	var msg map[string]string
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
@@ -142,109 +136,8 @@ func handleIncoming(
 		return
 	}
 
-	if msg["type"] == "CALL_OFFER" ||
-		msg["type"] == "CALL_ICE" {
-		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
-		if err != nil {
-			log.Printf("[GW] call GetParticipants: %v", err)
-			return
-		}
-
-		if !slices.Contains(pts.UserIds, senderID) {
-			log.Printf("[GW] user=%s not in chat=%s, drop %s", senderID, chatID, msg["type"])
-			return
-		}
-
-		log.Printf(
-			"[GW] routing %s user=%s chat=%s",
-			msg["type"],
-			senderID,
-			chatID,
-		)
-
-		sfuPayload, _ := json.Marshal(map[string]string{
-			"type":      msg["type"],
-			"chat_id":   chatID,
-			"user_id":   senderID,
-			"sdp":       msg["sdp"],
-			"candidate": msg["candidate"],
-		})
-
-		if err := cache.Publish(
-			ctx,
-			"callsfu:signal",
-			string(sfuPayload),
-		).Err(); err != nil {
-			log.Printf(
-				"[GW] Redis publish error: %v",
-				err,
-			)
-		}
-
-		return
-	}
-
-	log.Printf(
-		"[GW] msg type=%s user=%s chat=%s",
-		msg["type"],
-		senderID,
-		chatID,
-	)
-
-	callTypes := map[string]bool{
-		"CALL_INVITE": true,
-		"CALL_ACCEPT": true,
-		"CALL_REJECT": true,
-		"CALL_HANGUP": true,
-	}
-
-	if callTypes[msg["type"]] {
-		if msg["type"] == "CALL_HANGUP" {
-			sfuPayload, _ := json.Marshal(map[string]string{
-				"type":    "CALL_HANGUP",
-				"chat_id": chatID,
-				"user_id": senderID,
-			})
-			cache.Publish(ctx, "callsfu:signal", string(sfuPayload))
-		}
-		pts, err := chatSvc.GetParticipants(
-			ctx,
-			&chatpb.GetParticipantsRequest{
-				ChatId: chatID,
-			},
-		)
-		if err != nil {
-			log.Printf(
-				"WS call GetParticipants: %v",
-				err,
-			)
-			return
-		}
-
-		payload, _ := json.Marshal(msg)
-
-		for _, uid := range pts.UserIds {
-			if uid == senderID {
-				continue
-			}
-
-			cache.Publish(
-				ctx,
-				"ws:user:"+uid,
-				payload,
-			)
-
-			if msg["type"] == "CALL_INVITE" {
-				go sendCallPush(
-					ctx,
-					cache,
-					uid,
-					msg["name"],
-					chatID,
-				)
-			}
-		}
-
+	if strings.HasPrefix(msg["type"], "CALL_") {
+		handleCall(ctx, msg, senderID, c, cache)
 		return
 	}
 
