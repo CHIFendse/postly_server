@@ -84,7 +84,8 @@ services:
     restart: unless-stopped
     env_file: ./services/call-service/cmd/.env
     ports:
-      - "10000-10200:10000-10200/udp"
+      - "10000:10000/udp"
+      - "10000:10000/tcp"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

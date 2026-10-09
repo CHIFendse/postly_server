@@ -86,10 +86,10 @@ services:
     environment:
       REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ""
-      WEBRTC_UDP_MIN: "10300"
-      WEBRTC_UDP_MAX: "10400"
+      WEBRTC_PORT: "10300"
     ports: !override
-      - "10300-10400:10300-10400/udp"
+      - "10300:10300/udp"
+      - "10300:10300/tcp"
     depends_on:
       redis:
         condition: service_healthy

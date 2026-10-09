@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"maps"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -39,6 +41,8 @@ type SFU struct {
 	api   *webrtc.API
 	rdb   *redis.Client
 	ctx   context.Context
+	udp   *net.UDPConn
+	tcp   *net.TCPListener
 }
 
 func New(ctx context.Context, rdb *redis.Client) *SFU {
@@ -47,32 +51,67 @@ func New(ctx context.Context, rdb *redis.Client) *SFU {
 		log.Fatalf("[SFU] RegisterDefaultCodecs: %v", err)
 	}
 
+	publicIP, err := resolvePublicIP(os.Getenv("WEBRTC_PUBLIC_IP"))
+	if err != nil {
+		log.Fatalf("[SFU] WEBRTC_PUBLIC_IP: %v", err)
+	}
+	port := envPort("WEBRTC_PORT", 10000)
+
+	udp, err := net.ListenUDP("udp4", &net.UDPAddr{Port: port})
+	if err != nil {
+		log.Fatalf("[SFU] listen udp :%d: %v", port, err)
+	}
+	tcp, err := net.ListenTCP("tcp4", &net.TCPAddr{Port: port})
+	if err != nil {
+		log.Fatalf("[SFU] listen tcp :%d: %v", port, err)
+	}
+
 	se := webrtc.SettingEngine{}
-	minPort := envUint16("WEBRTC_UDP_MIN", 10000)
-	maxPort := envUint16("WEBRTC_UDP_MAX", 10200)
-	if err := se.SetEphemeralUDPPortRange(minPort, maxPort); err != nil {
-		log.Fatalf("[SFU] SetEphemeralUDPPortRange: %v", err)
-	}
-	publicIP := os.Getenv("WEBRTC_PUBLIC_IP")
-	if publicIP == "" {
-		log.Fatal("[SFU] WEBRTC_PUBLIC_IP is required")
-	}
+	se.SetICEUDPMux(webrtc.NewICEUDPMux(nil, udp))
+	se.SetICETCPMux(webrtc.NewICETCPMux(nil, tcp, 64))
+	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeTCP4})
 	se.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
-	log.Printf("[SFU] public ip=%s ports=%d-%d", publicIP, minPort, maxPort)
+	log.Printf("[SFU] public ip=%s port=%d (udp+tcp)", publicIP, port)
 
 	return &SFU{
 		rooms: make(map[string]*room),
 		api:   webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(se)),
 		rdb:   rdb,
 		ctx:   ctx,
+		udp:   udp,
+		tcp:   tcp,
 	}
 }
 
-func envUint16(key string, fallback uint16) uint16 {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseUint(v, 10, 16); err == nil {
-			return uint16(n)
+func resolvePublicIP(value string) (string, error) {
+	if value == "" {
+		return "", errors.New("is required")
+	}
+	if ip := net.ParseIP(value); ip != nil {
+		if ip.To4() == nil {
+			return "", fmt.Errorf("%s is not an IPv4 address", value)
 		}
+		return ip.String(), nil
+	}
+	ips, err := net.LookupIP(value)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", value, err)
+	}
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			log.Printf("[SFU] %s resolved to %s", value, v4)
+			return v4.String(), nil
+		}
+	}
+	return "", fmt.Errorf("%s has no IPv4 address", value)
+}
+
+func envPort(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 16); err == nil && n > 0 {
+			return int(n)
+		}
+		log.Fatalf("[SFU] invalid %s=%q", key, v)
 	}
 	return fallback
 }
@@ -423,4 +462,6 @@ func (s *SFU) Close() {
 	for _, pc := range pcs {
 		pc.Close()
 	}
+	s.udp.Close()
+	s.tcp.Close()
 }
