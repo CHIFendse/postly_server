@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -143,6 +144,16 @@ func handleIncoming(
 
 	if msg["type"] == "CALL_OFFER" ||
 		msg["type"] == "CALL_ICE" {
+		pts, err := chatSvc.GetParticipants(ctx, &chatpb.GetParticipantsRequest{ChatId: chatID})
+		if err != nil {
+			log.Printf("[GW] call GetParticipants: %v", err)
+			return
+		}
+
+		if !slices.Contains(pts.UserIds, senderID) {
+			log.Printf("[GW] user=%s not in chat=%s, drop %s", senderID, chatID, msg["type"])
+			return
+		}
 
 		log.Printf(
 			"[GW] routing %s user=%s chat=%s",
@@ -188,6 +199,14 @@ func handleIncoming(
 	}
 
 	if callTypes[msg["type"]] {
+		if msg["type"] == "CALL_HANGUP" {
+			sfuPayload, _ := json.Marshal(map[string]string{
+				"type":    "CALL_HANGUP",
+				"chat_id": chatID,
+				"user_id": senderID,
+			})
+			cache.Publish(ctx, "callsfu:signal", string(sfuPayload))
+		}
 		pts, err := chatSvc.GetParticipants(
 			ctx,
 			&chatpb.GetParticipantsRequest{

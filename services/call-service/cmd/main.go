@@ -38,6 +38,9 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("cannot load .env")
 	}
+	if os.Getenv("JWT_SECRET") == "" {
+		log.Fatal("JWT_SECRET is empty")
+	}
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     getenv("REDIS_ADDR", "localhost:6379"),
@@ -146,7 +149,7 @@ func handleConn(conn net.Conn, rooms *udp.RoomManager) {
 func validateToken(raw string) (string, error) {
 	tok, err := jwt.ParseWithClaims(raw, &claims{}, func(*jwt.Token) (any, error) {
 		return []byte(os.Getenv("JWT_SECRET")), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil || !tok.Valid {
 		return "", errors.New("invalid token")
 	}

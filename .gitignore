@@ -36,3 +36,4 @@ cmd/.ENV
 Thumbs.db
 .directory
 *~
+**/cmd/cmd

@@ -86,11 +86,11 @@ func handleFile(c *clients.Clients) http.HandlerFunc {
 		if info.Type == "file" {
 			disposition = "attachment; filename*=UTF-8''" + url.PathEscape(info.FileName)
 		}
-		proxyS3(w, r, c, info.S3Key, disposition)
+		proxyS3(w, r, c, info.S3Key, disposition, "private, max-age=3600")
 	}
 }
 
-func proxyS3(w http.ResponseWriter, r *http.Request, c *clients.Clients, key, disposition string) {
+func proxyS3(w http.ResponseWriter, r *http.Request, c *clients.Clients, key, disposition, cacheControl string) {
 
 	urlResp, err := c.S3.GetDownloadUrl(r.Context(), &s3pb.GetDownloadUrlRequest{
 		S3Key:        key,
@@ -141,7 +141,7 @@ func proxyS3(w http.ResponseWriter, r *http.Request, c *clients.Clients, key, di
 
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
-	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("Cache-Control", cacheControl)
 	w.Header().Set("Content-Disposition", disposition)
 
 	w.WriteHeader(s3Resp.StatusCode)

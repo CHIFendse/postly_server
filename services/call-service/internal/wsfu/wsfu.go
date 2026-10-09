@@ -80,6 +80,8 @@ func (s *SFU) Run(ctx context.Context) {
 			go s.handleOffer(ctx, data["chat_id"], data["user_id"], data["sdp"])
 		case "CALL_ICE":
 			go s.handleICE(data["chat_id"], data["user_id"], data["candidate"])
+		case "CALL_HANGUP":
+			go s.handleHangup(data["chat_id"], data["user_id"])
 		}
 	}
 }
@@ -118,6 +120,10 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 
 	pc.OnTrack(func(remote *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		log.Printf("[SFU] track from user=%s chat=%s codec=%s", userID, chatID, remote.Codec().MimeType)
+		if remote.Kind() != webrtc.RTPCodecTypeAudio {
+			log.Printf("[SFU] ignoring video track from user=%s", userID)
+			return
+		}
 		for {
 			pkt, _, err := remote.ReadRTP()
 			if err != nil {
@@ -143,14 +149,16 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("[SFU] user=%s chat=%s state→%s", userID, chatID, state)
 		if state == webrtc.PeerConnectionStateFailed ||
-			state == webrtc.PeerConnectionStateClosed ||
-			state == webrtc.PeerConnectionStateDisconnected {
-			s.removePeer(chatID, userID)
+			state == webrtc.PeerConnectionStateClosed {
+			s.removePeer(chatID, userID, pc)
 		}
 	})
 
 	if err := pc.SetRemoteDescription(offer); err != nil {
 		log.Printf("[SFU] SetRemoteDescription: %v", err)
+		s.mu.Lock()
+		delete(s.pendingICE, chatID+":"+userID)
+		s.mu.Unlock()
 		pc.Close()
 		return
 	}
@@ -160,25 +168,25 @@ func (s *SFU) handleOffer(ctx context.Context, chatID, userID, sdpJSON string) {
 	if s.rooms[chatID] == nil {
 		s.rooms[chatID] = make(map[string]*peer)
 	}
-	if old, ok := s.rooms[chatID][userID]; ok {
-		old.pc.Close()
-	}
+	old := s.rooms[chatID][userID]
+
 	s.rooms[chatID][userID] = &peer{pc: pc, sendTrack: sendTrack, userID: userID, chatID: chatID}
 	buffered := s.pendingICE[peerKey]
 	delete(s.pendingICE, peerKey)
 	s.mu.Unlock()
+	if old != nil {
+		old.pc.Close()
+	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
 		log.Printf("[SFU] CreateAnswer: %v", err)
-		pc.Close()
-		s.removePeer(chatID, userID)
+		s.removePeer(chatID, userID, pc)
 		return
 	}
 	if err := pc.SetLocalDescription(answer); err != nil {
 		log.Printf("[SFU] SetLocalDescription: %v", err)
-		pc.Close()
-		s.removePeer(chatID, userID)
+		s.removePeer(chatID, userID, pc)
 		return
 	}
 
@@ -239,20 +247,31 @@ func (s *SFU) forwardRTP(chatID, senderID string, pkt *rtp.Packet) {
 	}
 }
 
-func (s *SFU) removePeer(chatID, userID string) {
+func (s *SFU) removePeer(chatID, userID string, pc *webrtc.PeerConnection) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	room := s.rooms[chatID]
-	if room == nil {
-		return
+
+	if room := s.rooms[chatID]; room != nil {
+		if p, ok := room[userID]; ok && p.pc == pc {
+			delete(room, userID)
+			delete(s.pendingICE, chatID+":"+userID)
+			log.Printf("[SFU] removed user=%s chat=%s", userID, chatID)
+		}
+		if len(room) == 0 {
+			delete(s.rooms, chatID)
+		}
 	}
-	if p, ok := room[userID]; ok {
-		p.pc.Close()
-		delete(room, userID)
-		log.Printf("[SFU] removed user=%s chat=%s", userID, chatID)
+
+	s.mu.Unlock()
+	pc.Close()
+}
+
+func (s *SFU) handleHangup(chatID, userID string) {
+	s.mu.RLock()
+	p := s.rooms[chatID][userID]
+	s.mu.RUnlock()
+
+	if p != nil {
+		s.removePeer(chatID, userID, p.pc)
 	}
-	if len(room) == 0 {
-		delete(s.rooms, chatID)
-	}
-	delete(s.pendingICE, chatID+":"+userID)
+
 }

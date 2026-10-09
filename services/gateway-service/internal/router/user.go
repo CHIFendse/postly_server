@@ -221,7 +221,9 @@ func handleAvatar(c *clients.Clients) http.HandlerFunc {
 		}
 
 		key := r.URL.Query().Get("key")
+		cacheControl := "private, max-age=31536000, immutable"
 		if key == "" {
+			cacheControl = "private, no-cache"
 			userID := r.URL.Query().Get("user_id")
 			if userID == "" {
 				http.Error(w, "key or user_id required", http.StatusBadRequest)
@@ -245,7 +247,7 @@ func handleAvatar(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		proxyS3(w, r, c, key, "inline")
+		proxyS3(w, r, c, key, "inline", cacheControl)
 	}
 }
 
