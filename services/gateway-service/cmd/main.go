@@ -49,7 +49,7 @@ func main() {
 			log.Fatalf("serve tls: %v", err)
 		}
 	} else {
-		log.Printf("gateway listening on %s (no TLS)", addr)
+		log.Printf("g 	ateway listening on %s (no TLS)", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("serve: %v", err)
 		}

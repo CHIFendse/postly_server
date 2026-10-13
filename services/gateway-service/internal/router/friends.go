@@ -10,14 +10,14 @@ import (
 )
 
 func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/sendFriendRequest", JWTMiddleware(c, handleSendFriendRequest(c)))
-	mux.HandleFunc("/getFriendRequests", JWTMiddleware(c, handleGetFriendRequests(c)))
-	mux.HandleFunc("/acceptFriendRequest", JWTMiddleware(c, handleAcceptFriendRequest(c)))
-	mux.HandleFunc("/declineFriendRequest", JWTMiddleware(c, handleDeclineFriendRequest(c)))
-	mux.HandleFunc("/getFriends", JWTMiddleware(c, handleGetFriends(c)))
-	mux.HandleFunc("/deleteFriend", JWTMiddleware(c, handleDeleteFriend(c)))
-	mux.HandleFunc("/cancelFriendRequest", JWTMiddleware(c, handleCancelFriendRequest(c)))
-	mux.HandleFunc("/getSentRequests", JWTMiddleware(c, handleGetSentRequests(c)))
+	mux.HandleFunc("/sendFriendRequest", 	Chain(handleSendFriendRequest(c), JWTMiddleware(c)))
+	mux.HandleFunc("/getFriendRequests", 	Chain(handleGetFriendRequests(c), JWTMiddleware(c)))
+	mux.HandleFunc("/acceptFriendRequest",  Chain(handleAcceptFriendRequest(c), JWTMiddleware(c)))
+	mux.HandleFunc("/declineFriendRequest", Chain(handleDeclineFriendRequest(c), JWTMiddleware(c)))
+	mux.HandleFunc("/getFriends", 			Chain(handleGetFriends(c), JWTMiddleware(c)))
+	mux.HandleFunc("/deleteFriend", 		Chain(handleDeleteFriend(c), JWTMiddleware(c)))
+	mux.HandleFunc("/cancelFriendRequest",  Chain(handleCancelFriendRequest(c), JWTMiddleware(c)))
+	mux.HandleFunc("/getSentRequests",		Chain(handleGetSentRequests(c), JWTMiddleware(c)))
 }
 
 func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {

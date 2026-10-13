@@ -4,15 +4,23 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"time"
 
 	"gateway-service/internal/clients"
 	authpb "postly/proto/auth"
 )
-
+type Middleware func(http.HandlerFunc) http.HandlerFunc
 type contextKey string
-
 const UserIDKey contextKey = "user_id"
+
+
+func Chain(next http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
+		for i := len(middlewares) - 1; i >= 0; i-- {
+			next = middlewares[i](next)
+		}
+		return func(w http.ResponseWriter, r *http.Request) {
+			next(w, r)
+		}
+}
 
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,17 +48,26 @@ func authenticate(c *clients.Clients, r *http.Request) (string, bool) {
 	return resp.UserId, true
 }
 
-func JWTMiddleware(c *clients.Clients, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticate(c, r)
-		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+func JWTMiddleware(c *clients.Clients) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc{
+		return func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := authenticate(c, r)
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			next(w, r.WithContext(ctx))
 		}
+	}
+}
 
-		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-		defer cancel()
-		ctx = context.WithValue(ctx, UserIDKey, userID)
-		next(w, r.WithContext(ctx))
+
+func AttemptsMiddleware(c *clients.Clients) func (http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			
+			next(w, r)
+		}
 	}
 }

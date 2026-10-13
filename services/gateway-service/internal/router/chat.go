@@ -14,13 +14,13 @@ import (
 )
 
 func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.HandleFunc("/getChats", JWTMiddleware(c, handleGetChats(c)))
-	mux.HandleFunc("/getGroups", JWTMiddleware(c, handleGetGroups(c)))
-	mux.HandleFunc("/createChat", JWTMiddleware(c, handleCreateChat(c, cache)))
-	mux.HandleFunc("/createGroup", JWTMiddleware(c, handleCreateGroup(c, cache)))
-	mux.HandleFunc("/clearChat", JWTMiddleware(c, handleClearChat(c, cache)))
-	mux.HandleFunc("/deleteChat", JWTMiddleware(c, handleDeleteChat(c, cache)))
-	mux.HandleFunc("/deleteGroup", JWTMiddleware(c, handleDeleteGroup(c, cache)))
+	mux.HandleFunc("/getChats",		Chain(handleGetChats(c), JWTMiddleware(c)))
+	mux.HandleFunc("/getGroups", 	Chain(handleGetGroups(c), JWTMiddleware(c)))
+	mux.HandleFunc("/createChat", 	Chain(handleCreateChat(c, cache), JWTMiddleware(c)))
+	mux.HandleFunc("/createGroup", 	Chain(handleCreateGroup(c, cache), JWTMiddleware(c)))
+	mux.HandleFunc("/clearChat", 	Chain(handleClearChat(c, cache), JWTMiddleware(c)))
+	mux.HandleFunc("/deleteChat", 	Chain(handleDeleteChat(c, cache), JWTMiddleware(c)))
+	mux.HandleFunc("/deleteGroup", 	Chain(handleDeleteGroup(c, cache), JWTMiddleware(c)))
 }
 
 func handleGetChats(c *clients.Clients) http.HandlerFunc {

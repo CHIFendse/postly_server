@@ -91,18 +91,6 @@ services:
     networks:
       - internal
 
-  coturn:
-    image: coturn/coturn:4
-    restart: unless-stopped
-    ports:
-      - "3478:3478/udp"
-      - "3478:3478/tcp"
-      - "49152-49250:49152-49250/udp"
-    volumes:
-      - ./coturn.conf:/etc/turnserver.conf:ro
-    networks:
-      - internal
-
   gateway:
     build:
       context: .

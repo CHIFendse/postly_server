@@ -17,13 +17,12 @@ import (
 )
 
 func RegisterUser(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/register", handleRegister(c))
-	mux.HandleFunc("/getAvatarUploadUrl", JWTMiddleware(c, handleGetAvatarUploadURL(c)))
-	mux.HandleFunc("/setAvatar", JWTMiddleware(c, handleSetAvatar(c)))
-	mux.HandleFunc("/deleteAvatar", JWTMiddleware(c, handleDeleteAvatar(c)))
-	mux.HandleFunc("/getAvatars", JWTMiddleware(c, handleGetAvatars(c)))
-
-	mux.HandleFunc("/avatar", handleAvatar(c))
+	mux.HandleFunc("/register", 			Chain(handleRegister(c)))
+	mux.HandleFunc("/getAvatarUploadUrl", 	Chain(handleGetAvatarUploadURL(c), JWTMiddleware(c)))
+	mux.HandleFunc("/setAvatar",			Chain(handleSetAvatar(c), JWTMiddleware(c)))
+	mux.HandleFunc("/deleteAvatar", 		Chain(handleDeleteAvatar(c), JWTMiddleware(c)))
+	mux.HandleFunc("/getAvatars", 			Chain(handleGetAvatars(c), JWTMiddleware(c)))
+	mux.HandleFunc("/avatar", 				Chain(handleAvatar(c), JWTMiddleware(c)))
 }
 
 func avatarURLForUser(userID string) string {

@@ -17,5 +17,5 @@ func Setup(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	RegisterWS(mux, c, cache)
 	RegisterGetVersion(mux, c)
 
-	mux.HandleFunc("/registerFCMToken", JWTMiddleware(c, handleRegisterFCMToken(cache)))
+	mux.HandleFunc("/registerFCMToken", Chain(handleRegisterFCMToken(cache), JWTMiddleware(c)))
 }
