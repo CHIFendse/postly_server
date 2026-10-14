@@ -14,13 +14,13 @@ import (
 )
 
 func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.HandleFunc("/getChats",		Chain(handleGetChats(c), JWTMiddleware(c)))
-	mux.HandleFunc("/getGroups", 	Chain(handleGetGroups(c), JWTMiddleware(c)))
-	mux.HandleFunc("/createChat", 	Chain(handleCreateChat(c, cache), JWTMiddleware(c)))
-	mux.HandleFunc("/createGroup", 	Chain(handleCreateGroup(c, cache), JWTMiddleware(c)))
-	mux.HandleFunc("/clearChat", 	Chain(handleClearChat(c, cache), JWTMiddleware(c)))
-	mux.HandleFunc("/deleteChat", 	Chain(handleDeleteChat(c, cache), JWTMiddleware(c)))
-	mux.HandleFunc("/deleteGroup", 	Chain(handleDeleteGroup(c, cache), JWTMiddleware(c)))
+	mux.Handle("/getChats",		Chain(handleGetChats(c), JWTMiddleware(c)))
+	mux.Handle("/getGroups", 	Chain(handleGetGroups(c), JWTMiddleware(c)))
+	mux.Handle("/createChat", 	Chain(handleCreateChat(c, cache), JWTMiddleware(c)))
+	mux.Handle("/createGroup", 	Chain(handleCreateGroup(c, cache), JWTMiddleware(c)))
+	mux.Handle("/clearChat", 	Chain(handleClearChat(c, cache), JWTMiddleware(c)))
+	mux.Handle("/deleteChat", 	Chain(handleDeleteChat(c, cache), JWTMiddleware(c)))
+	mux.Handle("/deleteGroup", 	Chain(handleDeleteGroup(c, cache), JWTMiddleware(c)))
 }
 
 func handleGetChats(c *clients.Clients) http.HandlerFunc {
@@ -174,6 +174,7 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 		}
 
 		go func() {
+			defer RecoveryMonitor()
 			payload, _ := json.Marshal(map[string]string{
 				"type":    "NEW_CHAT",
 				"chat_id": resp.ChatId,
@@ -232,6 +233,7 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}
 
 		go func(groupID string, ids []string) {
+			defer RecoveryMonitor()
 			payload, _ := json.Marshal(map[string]string{
 				"type":    "NEW_CHAT",
 				"chat_id": groupID,
@@ -287,6 +289,7 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 
 		if pts != nil {
 			go func() {
+				defer RecoveryMonitor()
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "CLEAR_CHAT",
 					"chat_id": data.ChatId,
@@ -332,6 +335,7 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 
 		if pts != nil {
 			go func() {
+				defer RecoveryMonitor()
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "DELETE_CHAT",
 					"chat_id": data.ChatId,
@@ -376,6 +380,7 @@ func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}
 
 		if pts != nil {
+			defer RecoveryMonitor()
 			go func() {
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "DELETE_CHAT",

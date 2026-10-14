@@ -53,10 +53,11 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 		ch := sub.Channel()
 
 		go func() {
+			defer RecoveryMonitor()
+			defer sub.Close()
 			for {
 				_, raw, err := conn.ReadMessage()
 				if err != nil {
-					sub.Close()
 					return
 				}
 				handleIncoming(raw, userID, c, cache)
@@ -83,10 +84,8 @@ func handleIncoming(
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		log.Printf(
-			"[GW] parse error from %s: %v — raw: %.100s",
+			"[GW] parse error from %s",
 			senderID,
-			err,
-			string(raw),
 		)
 		return
 	}

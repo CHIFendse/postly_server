@@ -30,7 +30,11 @@ func main() {
 	router.Setup(mux, c, cache)
 
 	addr := ":" + getenv("HTTP_PORT", "8081")
-	srv := &http.Server{Addr: addr, Handler: router.CORS(mux)}
+	srv := &http.Server{Addr: addr, Handler: router.Chain(
+		mux, router.RequestIDMiddleware(), 
+		router.LoggingMiddleware(), router.RateLimitingMiddleware(20, 40),
+		router.RecoveryMiddleware(), router.CORSMiddleware(),
+	)}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
@@ -38,6 +42,8 @@ func main() {
 		<-quit
 		log.Println("shutting down gateway...")
 		srv.Close()
+		
+
 	}()
 
 	cert := os.Getenv("TLS_CERT")
@@ -49,7 +55,7 @@ func main() {
 			log.Fatalf("serve tls: %v", err)
 		}
 	} else {
-		log.Printf("g 	ateway listening on %s (no TLS)", addr)
+		log.Printf("gateway listening on %s (no TLS)", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("serve: %v", err)
 		}

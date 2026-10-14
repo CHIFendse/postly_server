@@ -13,10 +13,10 @@ import (
 )
 
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/getMessages", 	 Chain(handleGetMessages(c), JWTMiddleware(c)))
-	mux.HandleFunc("/sendMessage", 	 Chain(handleSendMessage(c), JWTMiddleware(c)))
-	mux.HandleFunc("/deleteMessage", Chain(handleDeleteMessage(c), JWTMiddleware(c)))
-	mux.HandleFunc("/getUploadUrl",  Chain(handleGetUploadURL(c), JWTMiddleware(c)))
+	mux.Handle("/getMessages", 	 Chain(handleGetMessages(c), JWTMiddleware(c)))
+	mux.Handle("/sendMessage", 	 Chain(handleSendMessage(c), JWTMiddleware(c)))
+	mux.Handle("/deleteMessage", Chain(handleDeleteMessage(c), JWTMiddleware(c)))
+	mux.Handle("/getUploadUrl",  Chain(handleGetUploadURL(c), JWTMiddleware(c)))
 }
 
 var folderByMsgType = map[string]string{

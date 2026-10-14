@@ -110,6 +110,7 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 }
 
 func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerName, chatID string) {
+	defer RecoveryMonitor()
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
 		return
@@ -138,6 +139,7 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 }
 
 func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, senderName, text, chatID string) {
+	defer RecoveryMonitor()
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
 		return

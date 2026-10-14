@@ -1,8 +1,8 @@
 x-dev-db: &dev-db
   DB_HOST: postgres
   DB_PORT: "5432"
-  DB_USER: postly
-  DB_PASSWORD: postly
+  DB_USER: chifendse
+  DB_PASSWORD: postgres
 
 x-dev-redis: &dev-redis
   REDIS_HOST: redis
@@ -21,8 +21,8 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postly
-      POSTGRES_PASSWORD: postly
+      POSTGRES_USER: chifendse
+      POSTGRES_PASSWORD: postgres
     volumes:
       - pgdata:/var/lib/postgresql
       - ./deploy/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
@@ -34,7 +34,7 @@ services:
     ports:
       - "15432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postly -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U chifendse -d postgres"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -60,6 +60,7 @@ services:
   auth-service:
     environment:
       <<: [*dev-db, *dev-redis]
+      JWT_SECRET: dev-only-jwt-secret
     depends_on: *dev-depends
 
   user-service:
@@ -86,6 +87,7 @@ services:
     environment:
       REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ""
+      WEBRTC_PUBLIC_IP: 127.0.0.1
       WEBRTC_PORT: "10300"
     ports: !override
       - "10300:10300/udp"
@@ -99,11 +101,9 @@ services:
       <<: *dev-redis
       TLS_CERT: ""
       TLS_KEY: ""
+    volumes: !reset []
     ports: !override
       - "18081:8081"
-
-  coturn:
-    profiles: ["prod"]
 
 volumes:
   pgdata:
