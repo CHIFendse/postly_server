@@ -214,8 +214,8 @@ func LoggingMiddleware() func(http.Handler) http.Handler {
 			before := time.Now()
 			next.ServeHTTP(logWriter, r)
 			duration := time.Since(before)
-			fmt.Printf("ID: %v, METHOD: %s, PATH: %s, STATUS: %v, DURATION %s, BYTES: %d\n", 
-			r.Context().Value(RequestIDKey), r.Method, r.URL.Path, logWriter.status, duration.String(), logWriter.bytes)
+			fmt.Printf("FROM: %v, ID: %v, METHOD: %s, PATH: %s, STATUS: %v, DURATION %s, BYTES: %d\n", 
+			r.RemoteAddr, r.Context().Value(RequestIDKey), r.Method, r.URL.Path, logWriter.status, duration.String(), logWriter.bytes)
 		})
 	}
 }
