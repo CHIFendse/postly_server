@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -16,8 +18,12 @@ import (
 	userpb "postly/proto/user"
 )
 
-func RegisterUser(mux *http.ServeMux, c *clients.Clients) {
-	mux.Handle("/register", Chain(handleRegister(c)))
+var registerCfg *AttemptsConfig = &AttemptsConfig{name: "register",
+					maxAttempts: 5, failWindow: 15*time.Minute, baseCooldown: 15*time.Minute,
+					maxCooldown: 15*time.Minute, strikeTTL: 24*time.Hour, refund: false}
+
+func RegisterUser(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
+	mux.Handle("/register", Chain(handleRegister(c), AttemptsMiddleware(cache, registerCfg)))
 	mux.Handle("/getAvatarUploadUrl", Chain(handleGetAvatarUploadURL(c), JWTMiddleware(c)))
 	mux.Handle("/setAvatar", Chain(handleSetAvatar(c), JWTMiddleware(c)))
 	mux.Handle("/deleteAvatar", Chain(handleDeleteAvatar(c), JWTMiddleware(c)))

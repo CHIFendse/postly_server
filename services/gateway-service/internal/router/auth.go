@@ -5,14 +5,22 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"gateway-service/internal/clients"
 	authpb "postly/proto/auth"
 	userpb "postly/proto/user"
+
+	"github.com/redis/go-redis/v9"
 )
 
-func RegisterAuth(mux *http.ServeMux, c *clients.Clients) {
-	mux.HandleFunc("/login", handleLogin(c))
+var loginCfg *AttemptsConfig = &AttemptsConfig{name: "login",
+				maxAttempts: 5, failWindow: 15*time.Minute, baseCooldown: 2*time.Minute,
+				maxCooldown: 2*time.Hour, strikeTTL: 24*time.Hour, refund: true,
+			}
+
+func RegisterAuth(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
+	mux.Handle("/login", Chain(handleLogin(c), AttemptsMiddleware(cache, loginCfg)))
 	mux.HandleFunc("/verify", handleVerify(c))
 }
 

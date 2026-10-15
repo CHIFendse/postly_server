@@ -8,8 +8,8 @@ import (
 )
 
 func Setup(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	RegisterAuth(mux, c)
-	RegisterUser(mux, c)
+	RegisterAuth(mux, c, cache)
+	RegisterUser(mux, c, cache)
 	RegisterChat(mux, c, cache)
 	RegisterMessaging(mux, c)
 	RegisterFiles(mux, c)
