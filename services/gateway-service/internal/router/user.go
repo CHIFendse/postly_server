@@ -17,12 +17,12 @@ import (
 )
 
 func RegisterUser(mux *http.ServeMux, c *clients.Clients) {
-	mux.Handle("/register", 			Chain(handleRegister(c)))
-	mux.Handle("/getAvatarUploadUrl", 	Chain(handleGetAvatarUploadURL(c), JWTMiddleware(c)))
-	mux.Handle("/setAvatar",			Chain(handleSetAvatar(c), JWTMiddleware(c)))
-	mux.Handle("/deleteAvatar", 		Chain(handleDeleteAvatar(c), JWTMiddleware(c)))
-	mux.Handle("/getAvatars", 			Chain(handleGetAvatars(c), JWTMiddleware(c)))
-	mux.Handle("/avatar", 				Chain(handleAvatar(c), JWTMiddleware(c)))
+	mux.Handle("/register", Chain(handleRegister(c)))
+	mux.Handle("/getAvatarUploadUrl", Chain(handleGetAvatarUploadURL(c), JWTMiddleware(c)))
+	mux.Handle("/setAvatar", Chain(handleSetAvatar(c), JWTMiddleware(c)))
+	mux.Handle("/deleteAvatar", Chain(handleDeleteAvatar(c), JWTMiddleware(c)))
+	mux.Handle("/getAvatars", Chain(handleGetAvatars(c), JWTMiddleware(c)))
+	mux.Handle("/avatar", Chain(handleAvatar(c), JWTMiddleware(c)))
 }
 
 func avatarURLForUser(userID string) string {
@@ -220,9 +220,8 @@ func handleAvatar(c *clients.Clients) http.HandlerFunc {
 		}
 
 		key := r.URL.Query().Get("key")
-		cacheControl := "private, max-age=31536000, immutable"
+		cacheControl := "private, max-age=86400"
 		if key == "" {
-			cacheControl = "private, no-cache"
 			userID := r.URL.Query().Get("user_id")
 			if userID == "" {
 				http.Error(w, "key or user_id required", http.StatusBadRequest)
