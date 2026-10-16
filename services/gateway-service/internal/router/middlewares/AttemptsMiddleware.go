@@ -1,11 +1,16 @@
 package middlewares
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -19,20 +24,53 @@ type AttemptsConfig struct {
 	MaxCooldown time.Duration
 	StrikeTTL time.Duration
 	Refund bool
+	KeyField string
 }
 
-func getRedisKeysForAttemptsMdw(path, ip string) []string {
-	result := []string{"rl:"+path+":"+ip+":lock", 
-	"rl:"+path+":"+ip+":fails", 
-	"rl:"+path+":"+ip+":strikes"}
-	return result
+const maxKeyBody = 4 << 10
+
+
+func keyPartFromBody(r *http.Request, field string) string {
+	if field == "" || r.Body == nil {
+		return ""
+	}
+	orig := r.Body
+	buf, err := io.ReadAll(io.LimitReader(orig, maxKeyBody+1))
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(buf), orig), orig}
+	if err != nil || len(buf) > maxKeyBody {
+		return ""
+	}
+
+	var m map[string]any
+	if json.Unmarshal(buf, &m) != nil {
+		return ""
+	}
+	v, _ := m[field].(string)
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:])
+}
+
+
+func getRedisKeysForAttemptsMdw(name, ip, part string) []string {
+	prefix := "rl:" + name + ":" + ip
+	if part != "" {
+		prefix += ":" + part
+	}
+	return []string{prefix + ":lock", prefix + ":fails", prefix + ":strikes"}
 }
 
 func AttemptsMiddleware(cache *redis.Client, cfg *AttemptsConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := clientIP(r)
-			keys := getRedisKeysForAttemptsMdw(cfg.Name, ip)
+			keys := getRedisKeysForAttemptsMdw(cfg.Name, ip, keyPartFromBody(r, cfg.KeyField))
 			ctx, cancel := context.WithTimeout(r.Context(), 300*time.Millisecond)
 			defer cancel()
 

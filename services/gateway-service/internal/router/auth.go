@@ -18,6 +18,7 @@ import (
 var loginCfg *middlewares.AttemptsConfig = &middlewares.AttemptsConfig{Name: "login",
 				MaxAttempts: 5, FailWindow: 15*time.Minute, BaseCooldown: 2*time.Minute,
 				MaxCooldown: 2*time.Hour, StrikeTTL: 24*time.Hour, Refund: true,
+				KeyField: "username",
 			}
 
 func RegisterAuth(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {

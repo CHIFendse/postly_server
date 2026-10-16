@@ -33,8 +33,8 @@ func main() {
 	addr := ":" + getenv("HTTP_PORT", "8081")
 	srv := &http.Server{Addr: addr, Handler: middlewares.Chain(
 		mux, middlewares.RequestIDMiddleware(), 
-		middlewares.LoggingMiddleware(), middlewares.RateLimitingMiddleware(5, 10),
-		middlewares.RecoveryMiddleware(), middlewares.CORSMiddleware(),
+		middlewares.LoggingMiddleware(), middlewares.RecoveryMiddleware(), 
+		middlewares.CORSMiddleware(), middlewares.RateLimitingMiddleware(5, 10),
 	)}
 
 	quit := make(chan os.Signal, 1)
