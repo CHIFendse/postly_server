@@ -4,20 +4,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"gateway-service/internal/clients"
+	initrouter "gateway-service/internal/router/initrouter"
+	"gateway-service/internal/router/middlewares"
 	"net/http"
+	"net/url"
 	friendspb "postly/proto/friends"
 	userpb "postly/proto/user"
 )
 
+func avatarURLForUser(userID string) string {
+	if userID == "" {
+		return ""
+	}
+	return "/avatar?user_id=" + url.QueryEscape(userID)
+}
+
+
 func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
-	mux.Handle("/sendFriendRequest", 	Chain(handleSendFriendRequest(c), JWTMiddleware(c)))
-	mux.Handle("/getFriendRequests", 	Chain(handleGetFriendRequests(c), JWTMiddleware(c)))
-	mux.Handle("/acceptFriendRequest",  Chain(handleAcceptFriendRequest(c), JWTMiddleware(c)))
-	mux.Handle("/declineFriendRequest", Chain(handleDeclineFriendRequest(c), JWTMiddleware(c)))
-	mux.Handle("/getFriends", 			Chain(handleGetFriends(c), JWTMiddleware(c)))
-	mux.Handle("/deleteFriend", 		Chain(handleDeleteFriend(c), JWTMiddleware(c)))
-	mux.Handle("/cancelFriendRequest",  Chain(handleCancelFriendRequest(c), JWTMiddleware(c)))
-	mux.Handle("/getSentRequests",		Chain(handleGetSentRequests(c), JWTMiddleware(c)))
+	mux.Handle("/sendFriendRequest", 	middlewares.Chain(handleSendFriendRequest(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getFriendRequests", 	middlewares.Chain(HandleGetFriendRequests(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/acceptFriendRequest",  middlewares.Chain(handleAcceptFriendRequest(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/declineFriendRequest", middlewares.Chain(handleDeclineFriendRequest(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getFriends", 			middlewares.Chain(HandleGetFriends(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteFriend", 		middlewares.Chain(handleDeleteFriend(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/cancelFriendRequest",  middlewares.Chain(handleCancelFriendRequest(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getSentRequests",		middlewares.Chain(HandleGetSentRequests(c), middlewares.JWTMiddleware(c)))
 }
 
 func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
@@ -27,7 +38,7 @@ func handleDeleteFriend(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		user := r.Context().Value(UserIDKey).(string)
+		user := r.Context().Value(middlewares.UserIDKey).(string)
 		var data struct {
 			FriendId string `json:"friend_id"`
 		}
@@ -71,7 +82,8 @@ func handleSendFriendRequest(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			Username       string `json:"username"`
@@ -107,41 +119,13 @@ func handleSendFriendRequest(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleGetFriendRequests(c *clients.Clients) http.HandlerFunc {
+func HandleGetFriendRequests(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(UserIDKey).(string)
-
-		resp, err := c.Friends.GetFriendRequests(r.Context(), &friendspb.GetFriendRequestsReq{UserId: userID})
+		out, err := initrouter.GetFriendRequests(r.Context(), c, r.Context().Value(middlewares.UserIDKey).(string))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения заявок"})
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		type reqOut struct {
-			Id        string `json:"id"`
-			SenderId  string `json:"sender_id"`
-			Username  string `json:"username"`
-			AvatarURL string `json:"avatar_url"`
-			CreatedAt int64  `json:"created_at"`
-		}
-		out := make([]reqOut, 0, len(resp.Requests))
-		for _, req := range resp.Requests {
-			username := req.SenderId
-			u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: req.SenderId})
-			if err == nil {
-				username = u.Username
-			}
-			avatarURL := avatarURLForUser(req.SenderId)
-			out = append(out, reqOut{
-				Id:        req.Id,
-				SenderId:  req.SenderId,
-				Username:  username,
-				AvatarURL: avatarURL,
-				CreatedAt: req.CreatedAt,
-			})
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
 	}
@@ -153,7 +137,7 @@ func handleAcceptFriendRequest(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			RequestID string `json:"request_id"`
@@ -184,7 +168,7 @@ func handleDeclineFriendRequest(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			RequestID string `json:"request_id"`
@@ -209,32 +193,13 @@ func handleDeclineFriendRequest(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleGetFriends(c *clients.Clients) http.HandlerFunc {
+func HandleGetFriends(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(UserIDKey).(string)
-
-		resp, err := c.Friends.GetFriends(r.Context(), &friendspb.GetFriendsReq{UserId: userID})
+		out, err := initrouter.GetFriends(r.Context(), c, r.Context().Value(middlewares.UserIDKey).(string))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения друзей"})
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		type friendOut struct {
-			Id        string `json:"id"`
-			Username  string `json:"username"`
-			AvatarURL string `json:"avatar_url"`
-		}
-		out := make([]friendOut, 0, len(resp.Friends))
-		for _, f := range resp.Friends {
-			username := f.UserId
-			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: f.UserId}); err == nil {
-				username = u.Username
-			}
-			avatarURL := avatarURLForUser(f.UserId)
-			out = append(out, friendOut{Id: f.UserId, Username: username, AvatarURL: avatarURL})
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
 	}
@@ -246,7 +211,7 @@ func handleCancelFriendRequest(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			RequestID string `json:"request_id"`
@@ -271,41 +236,13 @@ func handleCancelFriendRequest(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleGetSentRequests(c *clients.Clients) http.HandlerFunc {
+func HandleGetSentRequests(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(UserIDKey).(string)
-
-		resp, err := c.Friends.GetSentRequests(r.Context(), &friendspb.GetFriendRequestsReq{UserId: userID})
+		out, err := initrouter.GetSentRequests(r.Context(), c, r.Context().Value(middlewares.UserIDKey).(string))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения заявок"})
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		type reqOut struct {
-			Id         string `json:"id"`
-			ReceiverId string `json:"receiver_id"`
-			Username   string `json:"username"`
-			AvatarURL  string `json:"avatar_url"`
-			CreatedAt  int64  `json:"created_at"`
-		}
-		out := make([]reqOut, 0, len(resp.Requests))
-		for _, req := range resp.Requests {
-
-			username := req.SenderId
-			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: req.SenderId}); err == nil {
-				username = u.Username
-			}
-			avatarURL := avatarURLForUser(req.SenderId)
-			out = append(out, reqOut{
-				Id:         req.Id,
-				ReceiverId: req.SenderId,
-				Username:   username,
-				AvatarURL:  avatarURL,
-				CreatedAt:  req.CreatedAt,
-			})
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)
 	}

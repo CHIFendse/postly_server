@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"gateway-service/internal/clients"
+	"gateway-service/internal/router/middlewares"
 	authpb "postly/proto/auth"
 	chatpb "postly/proto/chat"
 	msgpb "postly/proto/messaging"
@@ -53,7 +54,7 @@ func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 		ch := sub.Channel()
 
 		go func() {
-			defer RecoveryMonitor()
+			defer middlewares.RecoveryMonitor()
 			defer sub.Close()
 			for {
 				_, raw, err := conn.ReadMessage()

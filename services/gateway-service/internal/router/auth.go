@@ -8,23 +8,24 @@ import (
 	"time"
 
 	"gateway-service/internal/clients"
+	"gateway-service/internal/router/middlewares"
 	authpb "postly/proto/auth"
 	userpb "postly/proto/user"
 
 	"github.com/redis/go-redis/v9"
 )
 
-var loginCfg *AttemptsConfig = &AttemptsConfig{name: "login",
-				maxAttempts: 5, failWindow: 15*time.Minute, baseCooldown: 2*time.Minute,
-				maxCooldown: 2*time.Hour, strikeTTL: 24*time.Hour, refund: true,
+var loginCfg *middlewares.AttemptsConfig = &middlewares.AttemptsConfig{Name: "login",
+				MaxAttempts: 5, FailWindow: 15*time.Minute, BaseCooldown: 2*time.Minute,
+				MaxCooldown: 2*time.Hour, StrikeTTL: 24*time.Hour, Refund: true,
 			}
 
 func RegisterAuth(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.Handle("/login", Chain(handleLogin(c), AttemptsMiddleware(cache, loginCfg)))
-	mux.HandleFunc("/verify", handleVerify(c))
+	mux.Handle("/login", middlewares.Chain(HandleLogin(c), middlewares.AttemptsMiddleware(cache, loginCfg)))
+	mux.HandleFunc("/verify", HandleVerify(c))
 }
 
-func handleLogin(c *clients.Clients) http.HandlerFunc {
+func HandleLogin(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -65,7 +66,7 @@ func handleLogin(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleVerify(c *clients.Clients) http.HandlerFunc {
+func HandleVerify(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if token == "" {

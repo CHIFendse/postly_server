@@ -7,16 +7,17 @@ import (
 	"strings"
 
 	"gateway-service/internal/clients"
+	"gateway-service/internal/router/middlewares"
 	msgpb "postly/proto/messaging"
 	s3pb "postly/proto/s3"
 	userpb "postly/proto/user"
 )
 
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
-	mux.Handle("/getMessages", 	 Chain(handleGetMessages(c), JWTMiddleware(c)))
-	mux.Handle("/sendMessage", 	 Chain(handleSendMessage(c), JWTMiddleware(c)))
-	mux.Handle("/deleteMessage", Chain(handleDeleteMessage(c), JWTMiddleware(c)))
-	mux.Handle("/getUploadUrl",  Chain(handleGetUploadURL(c), JWTMiddleware(c)))
+	mux.Handle("/getMessages", 	 middlewares.Chain(HandleGetMessages(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/sendMessage", 	 middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteMessage", middlewares.Chain(handleDeleteMessage(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getUploadUrl",  middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
 }
 
 var folderByMsgType = map[string]string{
@@ -60,7 +61,7 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			FileName    string `json:"file_name"`
@@ -97,7 +98,7 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleGetMessages(c *clients.Clients) http.HandlerFunc {
+func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		chatID := r.URL.Query().Get("chat_id")
@@ -179,7 +180,7 @@ func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			ChatID string `json:"chat_id"`
@@ -212,7 +213,7 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			MessageID string `json:"message_id"`

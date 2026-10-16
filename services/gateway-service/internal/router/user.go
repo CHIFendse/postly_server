@@ -13,30 +13,26 @@ import (
 	"google.golang.org/grpc/status"
 
 	"gateway-service/internal/clients"
+	"gateway-service/internal/router/middlewares"
 	authpb "postly/proto/auth"
 	s3pb "postly/proto/s3"
 	userpb "postly/proto/user"
 )
 
-var registerCfg *AttemptsConfig = &AttemptsConfig{name: "register",
-					maxAttempts: 5, failWindow: 15*time.Minute, baseCooldown: 15*time.Minute,
-					maxCooldown: 15*time.Minute, strikeTTL: 24*time.Hour, refund: false}
+var registerCfg *middlewares.AttemptsConfig = &middlewares.AttemptsConfig{Name: "register",
+	MaxAttempts: 5, FailWindow: 15 * time.Minute, BaseCooldown: 15 * time.Minute,
+	MaxCooldown: 15 * time.Minute, StrikeTTL: 24 * time.Hour, Refund: false}
 
 func RegisterUser(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.Handle("/register", Chain(handleRegister(c), AttemptsMiddleware(cache, registerCfg)))
-	mux.Handle("/getAvatarUploadUrl", Chain(handleGetAvatarUploadURL(c), JWTMiddleware(c)))
-	mux.Handle("/setAvatar", Chain(handleSetAvatar(c), JWTMiddleware(c)))
-	mux.Handle("/deleteAvatar", Chain(handleDeleteAvatar(c), JWTMiddleware(c)))
-	mux.Handle("/getAvatars", Chain(handleGetAvatars(c), JWTMiddleware(c)))
-	mux.Handle("/avatar", Chain(handleAvatar(c), JWTMiddleware(c)))
+	mux.Handle("/register", middlewares.Chain(handleRegister(c), middlewares.AttemptsMiddleware(cache, registerCfg)))
+	mux.Handle("/getAvatarUploadUrl", middlewares.Chain(handleGetAvatarUploadURL(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/setAvatar", middlewares.Chain(handleSetAvatar(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteAvatar", middlewares.Chain(handleDeleteAvatar(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getAvatars", middlewares.Chain(handleGetAvatars(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/avatar", middlewares.Chain(HandleAvatar(c), middlewares.JWTMiddleware(c)))
 }
 
-func avatarURLForUser(userID string) string {
-	if userID == "" {
-		return ""
-	}
-	return "/avatar?user_id=" + url.QueryEscape(userID)
-}
+
 
 func avatarURLForKey(key string) string {
 	if key == "" {
@@ -70,7 +66,7 @@ func handleGetAvatarUploadURL(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			FileName    string `json:"file_name"`
@@ -110,7 +106,7 @@ func handleSetAvatar(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			S3Key string `json:"s3_key"`
@@ -139,7 +135,7 @@ func handleSetAvatar(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"avatar_url": avatarURLForUser(userID)})
+		// writeJSON(w, http.StatusOK, map[string]string{"avatar_url": avatarURLForUser(userID)})
 	}
 }
 
@@ -149,7 +145,7 @@ func handleDeleteAvatar(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			S3Key string `json:"s3_key"`
@@ -187,7 +183,7 @@ func handleGetAvatars(c *clients.Clients) http.HandlerFunc {
 		}
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			userID = r.Context().Value(UserIDKey).(string)
+			userID = r.Context().Value(middlewares.UserIDKey).(string)
 		}
 
 		resp, err := c.User.GetAvatars(r.Context(), &userpb.GetAvatarsRequest{UserId: userID})
@@ -214,7 +210,7 @@ func handleGetAvatars(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleAvatar(c *clients.Clients) http.HandlerFunc {
+func HandleAvatar(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

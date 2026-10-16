@@ -12,6 +12,7 @@ import (
 
 	"gateway-service/internal/clients"
 	"gateway-service/internal/router"
+	"gateway-service/internal/router/middlewares"
 )
 
 func main() {
@@ -30,10 +31,10 @@ func main() {
 	router.Setup(mux, c, cache)
 
 	addr := ":" + getenv("HTTP_PORT", "8081")
-	srv := &http.Server{Addr: addr, Handler: router.Chain(
-		mux, router.RequestIDMiddleware(), 
-		router.LoggingMiddleware(), router.RateLimitingMiddleware(20, 40),
-		router.RecoveryMiddleware(), router.CORSMiddleware(),
+	srv := &http.Server{Addr: addr, Handler: middlewares.Chain(
+		mux, middlewares.RequestIDMiddleware(), 
+		middlewares.LoggingMiddleware(), middlewares.RateLimitingMiddleware(5, 10),
+		middlewares.RecoveryMiddleware(), middlewares.CORSMiddleware(),
 	)}
 
 	quit := make(chan os.Signal, 1)

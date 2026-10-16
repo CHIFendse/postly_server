@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"gateway-service/internal/clients"
+	"gateway-service/internal/router/initrouter"
+	"gateway-service/internal/router/middlewares"
 	chatpb "postly/proto/chat"
 	userpb "postly/proto/user"
 
@@ -14,69 +16,23 @@ import (
 )
 
 func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.Handle("/getChats",		Chain(handleGetChats(c), JWTMiddleware(c)))
-	mux.Handle("/getGroups", 	Chain(handleGetGroups(c), JWTMiddleware(c)))
-	mux.Handle("/createChat", 	Chain(handleCreateChat(c, cache), JWTMiddleware(c)))
-	mux.Handle("/createGroup", 	Chain(handleCreateGroup(c, cache), JWTMiddleware(c)))
-	mux.Handle("/clearChat", 	Chain(handleClearChat(c, cache), JWTMiddleware(c)))
-	mux.Handle("/deleteChat", 	Chain(handleDeleteChat(c, cache), JWTMiddleware(c)))
-	mux.Handle("/deleteGroup", 	Chain(handleDeleteGroup(c, cache), JWTMiddleware(c)))
+	mux.Handle("/getChats",		middlewares.Chain(HandleGetChats(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getGroups", 	middlewares.Chain(HandleGetGroups(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/createChat", 	middlewares.Chain(handleCreateChat(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/createGroup", 	middlewares.Chain(handleCreateGroup(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/clearChat", 	middlewares.Chain(handleClearChat(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteChat", 	middlewares.Chain(handleDeleteChat(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteGroup", 	middlewares.Chain(handleDeleteGroup(c, cache), middlewares.JWTMiddleware(c)))
 }
 
-func handleGetChats(c *clients.Clients) http.HandlerFunc {
+func HandleGetChats(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
-		resp, err := c.Chat.GetChats(r.Context(), &chatpb.GetChatsRequest{UserId: userID})
+		out, err := initrouter.GetChats(r.Context(), c, userID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения чатов"})
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
-		}
-
-		type chatOut struct {
-			Id          string `json:"id"`
-			UserID      string `json:"user_id"`
-			Name        string `json:"name"`
-			LastMessage string `json:"last_message"`
-			Username    string `json:"username"`
-			AvatarURL   string `json:"avatar_url"`
-			UpdatedAt   int64  `json:"updated_at"`
-		}
-
-		type userOut struct {
-			username  string
-			avatarURL string
-		}
-		resolved := map[string]userOut{}
-		resolve := func(uid string) userOut {
-			if uid == "" {
-				return userOut{}
-			}
-			if v, ok := resolved[uid]; ok {
-				return v
-			}
-			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: uid}); err == nil {
-				result := userOut{username: u.Username, avatarURL: avatarURLForUser(uid)}
-				resolved[uid] = result
-				return result
-			}
-			return userOut{}
-		}
-
-		out := make([]chatOut, 0, len(resp.Chats))
-		for _, ch := range resp.Chats {
-			chatUser := resolve(ch.Name)
-			lastMessageUser := resolve(ch.LastMsgSender)
-			out = append(out, chatOut{
-				Id:          ch.Id,
-				UserID:      ch.Name,
-				Name:        chatUser.username,
-				LastMessage: ch.LastMessage,
-				Username:    lastMessageUser.username,
-				AvatarURL:   chatUser.avatarURL,
-				UpdatedAt:   ch.UpdatedAt,
-			})
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -84,49 +40,14 @@ func handleGetChats(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-func handleGetGroups(c *clients.Clients) http.HandlerFunc {
+func HandleGetGroups(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
-		resp, err := c.Chat.GetGroups(r.Context(), &chatpb.GetGroupsRequest{UserId: userID})
+		out, err := initrouter.GetGroups(r.Context(), c, userID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения групп"})
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
-		}
-
-		type groupOut struct {
-			Id          string `json:"id"`
-			Name        string `json:"name"`
-			LastMessage string `json:"last_message"`
-			Username    string `json:"username"`
-			UpdatedAt   int64  `json:"updated_at"`
-		}
-
-		resolved := map[string]string{}
-		resolve := func(uid string) string {
-			if uid == "" {
-				return ""
-			}
-			if v, ok := resolved[uid]; ok {
-				return v
-			}
-			if u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: uid}); err == nil {
-				resolved[uid] = u.Username
-				return u.Username
-			}
-			return ""
-		}
-
-		out := make([]groupOut, 0, len(resp.Groups))
-		for _, g := range resp.Groups {
-			out = append(out, groupOut{
-				Id:          g.Id,
-				Name:        g.Name,
-				LastMessage: g.LastMessage,
-				Username:    resolve(g.LastMsgSender),
-				UpdatedAt:   g.UpdatedAt,
-			})
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -140,7 +61,7 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			Username       string `json:"username"`
@@ -174,7 +95,7 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 		}
 
 		go func() {
-			defer RecoveryMonitor()
+			defer middlewares.RecoveryMonitor()
 			payload, _ := json.Marshal(map[string]string{
 				"type":    "NEW_CHAT",
 				"chat_id": resp.ChatId,
@@ -193,7 +114,7 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			Name        string   `json:"name"`
@@ -233,7 +154,7 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}
 
 		go func(groupID string, ids []string) {
-			defer RecoveryMonitor()
+			defer middlewares.RecoveryMonitor()
 			payload, _ := json.Marshal(map[string]string{
 				"type":    "NEW_CHAT",
 				"chat_id": groupID,
@@ -263,7 +184,7 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			ChatId string `json:"chat_id"`
@@ -289,7 +210,7 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 
 		if pts != nil {
 			go func() {
-				defer RecoveryMonitor()
+				defer middlewares.RecoveryMonitor()
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "CLEAR_CHAT",
 					"chat_id": data.ChatId,
@@ -311,7 +232,7 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			ChatId string `json:"chat_id"`
@@ -335,7 +256,7 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 
 		if pts != nil {
 			go func() {
-				defer RecoveryMonitor()
+				defer middlewares.RecoveryMonitor()
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "DELETE_CHAT",
 					"chat_id": data.ChatId,
@@ -357,7 +278,7 @@ func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID := r.Context().Value(UserIDKey).(string)
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
 			ChatId string `json:"chat_id"`
@@ -380,7 +301,7 @@ func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		}
 
 		if pts != nil {
-			defer RecoveryMonitor()
+			defer middlewares.RecoveryMonitor()
 			go func() {
 				payload, _ := json.Marshal(map[string]string{
 					"type":    "DELETE_CHAT",

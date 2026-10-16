@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gateway-service/internal/router/middlewares"
 	"log"
 	"net/http"
 	"os"
@@ -95,7 +96,7 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		userID, _ := r.Context().Value(UserIDKey).(string)
+		userID, _ := r.Context().Value(middlewares.UserIDKey).(string)
 		var body struct {
 			FCMToken string `json:"fcm_token"`
 		}
@@ -110,7 +111,7 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 }
 
 func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerName, chatID string) {
-	defer RecoveryMonitor()
+	defer middlewares.RecoveryMonitor()
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
 		return
@@ -139,7 +140,7 @@ func sendCallPush(ctx context.Context, cache *redis.Client, recipientID, callerN
 }
 
 func sendMessagePush(ctx context.Context, cache *redis.Client, recipientID, senderName, text, chatID string) {
-	defer RecoveryMonitor()
+	defer middlewares.RecoveryMonitor()
 	deviceToken := getFCMToken(ctx, cache, recipientID)
 	if deviceToken == "" {
 		return

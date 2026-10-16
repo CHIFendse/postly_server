@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,6 +14,7 @@ import (
 	chatpb "postly/proto/chat"
 	msgpb "postly/proto/messaging"
 	s3pb "postly/proto/s3"
+	authpb "postly/proto/auth"
 )
 
 func fileURLFor(messageID string) string {
@@ -31,6 +33,19 @@ var passRangeHeaders = []string{
 func RegisterFiles(mux *http.ServeMux, c *clients.Clients) {
 
 	mux.HandleFunc("/file", handleFile(c))
+}
+
+func authenticate(c *clients.Clients, r *http.Request) (string, bool) {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if token == "" {
+		return "", false
+	}
+
+	resp, err := c.Auth.ValidateToken(r.Context(), &authpb.ValidateTokenRequest{Token: token})
+	if err != nil || !resp.Valid {
+		return "", false
+	}
+	return resp.UserId, true
 }
 
 func handleFile(c *clients.Clients) http.HandlerFunc {
