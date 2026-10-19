@@ -3,6 +3,7 @@ ARG SERVICE
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM golang:alpine AS builder
 ARG SERVICE
+RUN apk add --no-cache build-base
 WORKDIR /app
 
 # Shared proto (all services: replace postly/proto => ../../proto)
@@ -13,7 +14,7 @@ COPY services/${SERVICE}/ services/${SERVICE}/
 
 WORKDIR /app/services/${SERVICE}
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /service ./cmd
+RUN CGO_ENABLED=1 GOOS=linux go build -tags musl -trimpath -ldflags="-w -s" -o /service ./cmd
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.20
