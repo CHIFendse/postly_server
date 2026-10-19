@@ -143,6 +143,7 @@ func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.Accept
 		payload, _ := json.Marshal(map[string]string{
 			"type":      "FRIEND_ACCEPTED",
 			"friend_id": pair[1],
+			"actor_id": req.UserId,
 		})
 		s.cache.Publish(ctx, wsPubPrefix+pair[0], payload)
 	}
