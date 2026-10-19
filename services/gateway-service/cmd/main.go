@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"fmt"
 
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
@@ -61,6 +63,25 @@ func main() {
 			log.Fatalf("serve: %v", err)
 		}
 	}
+
+	a, err := kafka.NewAdminClient(&kafka.ConfigMap{
+		"bootstrap.servers": "kafka:19092",
+		"security.protocol": "SASL_PLAINTEXT",
+		"sasl.mechanisms":   "PLAIN",
+		"sasl.username":     "orders",
+		"sasl.password":     os.Getenv("KAFKA_USER_ORDERS_PASS"),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer a.Close()
+
+	md, err := a.GetMetadata(nil, true, 5000)
+	if err != nil {
+		log.Fatalf("нет соединения: %v", err)
+	}
+	fmt.Printf("OK: брокеров %d, топиков %d\n", len(md.Brokers), len(md.Topics))
+	
 }
 
 func getenv(key, fallback string) string {
