@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"fmt"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/joho/godotenv"
@@ -22,6 +21,8 @@ func main() {
 		log.Fatal("cannot load .env")
 	}
 
+	checkKafka()
+
 	c := clients.New()
 
 	cache := redis.NewClient(&redis.Options{
@@ -34,8 +35,8 @@ func main() {
 
 	addr := ":" + getenv("HTTP_PORT", "8081")
 	srv := &http.Server{Addr: addr, Handler: middlewares.Chain(
-		mux, middlewares.RequestIDMiddleware(), 
-		middlewares.LoggingMiddleware(), middlewares.RecoveryMiddleware(), 
+		mux, middlewares.RequestIDMiddleware(),
+		middlewares.LoggingMiddleware(), middlewares.RecoveryMiddleware(),
 		middlewares.CORSMiddleware(), middlewares.RateLimitingMiddleware(5, 10),
 	)}
 
@@ -45,7 +46,6 @@ func main() {
 		<-quit
 		log.Println("shutting down gateway...")
 		srv.Close()
-		
 
 	}()
 
@@ -64,24 +64,30 @@ func main() {
 		}
 	}
 
-	a, err := kafka.NewAdminClient(&kafka.ConfigMap{
-		"bootstrap.servers": "kafka:19092",
-		"security.protocol": "SASL_PLAINTEXT",
-		"sasl.mechanisms":   "PLAIN",
-		"sasl.username":     "orders",
-		"sasl.password":     os.Getenv("KAFKA_USER_ORDERS_PASS"),
-	})
+}
+
+func checkKafka() {
+	cfg := &kafka.ConfigMap{
+		"bootstrap.servers": getenv("KAFKA_BROKERS", "localhost:9092"),
+	}
+	if proto := getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT"); proto != "PLAINTEXT" {
+		cfg.SetKey("security.protocol", proto)
+		cfg.SetKey("sasl.mechanisms", "PLAIN")
+		cfg.SetKey("sasl.username", os.Getenv("KAFKA_SASL_USERNAME"))
+		cfg.SetKey("sasl.password", os.Getenv("KAFKA_SASL_PASSWORD"))
+	}
+
+	a, err := kafka.NewAdminClient(cfg)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("kafka client: %v", err)
 	}
 	defer a.Close()
 
 	md, err := a.GetMetadata(nil, true, 5000)
 	if err != nil {
-		log.Fatalf("нет соединения: %v", err)
+		log.Fatalf("kafka недоступна: %v", err)
 	}
-	fmt.Printf("OK: брокеров %d, топиков %d\n", len(md.Brokers), len(md.Topics))
-	
+	log.Printf("kafka OK: брокеров %d, топиков %d", len(md.Brokers), len(md.Topics))
 }
 
 func getenv(key, fallback string) string {
