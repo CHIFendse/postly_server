@@ -44,6 +44,7 @@ func NewConsumer(handler Handler, address []string, topic, consumerGroup string)
 }
 
 func (c *Consumer) Start() {
+	if c == nil { return }
 	for {
 		if c.stop.Load() {
 			break
@@ -66,6 +67,7 @@ func (c *Consumer) Start() {
 }
 
 func (c *Consumer) Stop() error {
+	if c == nil { return fmt.Errorf("consumer struct empty") }
 	c.stop.Store(true)
 	if _, err := c.consumer.Commit(); err != nil {
 		log.Printf("stop error consumer: %v\n", err)

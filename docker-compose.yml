@@ -74,6 +74,19 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - internal
+  
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: notification-service
+    restart: unless-stopped
+    env_file: ./services/notification-service/cmd/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - internal
 
   call-service:
     build:
