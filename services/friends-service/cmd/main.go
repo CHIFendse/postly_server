@@ -14,6 +14,7 @@ import (
 
 	"friends-service/internal/db"
 	"friends-service/internal/server"
+	"postly/pkg/kafkax"
 	friendspb "postly/proto/friends"
 )
 
@@ -21,7 +22,17 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("cannot load .env")
 	}
-
+	var k *kafkax.Producer
+	var err error
+	kafkaServers := getenv("KAFKA_BOOTSTRAP_SERVERS", "")
+	if kafkaServers != "" {
+		k, err = kafkax.NewProducer(kafkaServers, "notification-events")
+		if err != nil {
+			log.Fatalf("friends-service: error creating producer: %v", err)
+		}
+	}
+	defer k.Stop()
+	
 	conn, err := db.Init()
 	if err != nil {
 		log.Fatalf("db: %v", err)
@@ -34,7 +45,7 @@ func main() {
 	})
 
 	srv := grpc.NewServer()
-	friendspb.RegisterFriendsServiceServer(srv, server.New(conn, cache))
+	friendspb.RegisterFriendsServiceServer(srv, server.New(conn, cache, k))
 	reflection.Register(srv)
 
 	addr := ":" + getenv("GRPC_PORT", "50055")

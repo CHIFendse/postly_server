@@ -19,7 +19,9 @@ Backend Postly — набор микросервисов на Go, взаимод
 
 ```
 postly_server/
-├── proto/           
+├── pkg/
+│   ├── proto/
+│   ├── kafkax/
 ├── services/
 │   ├── gateway/       
 │   ├── auth/

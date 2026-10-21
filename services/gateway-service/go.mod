@@ -14,7 +14,7 @@ require (
 	postly/proto v0.0.0
 )
 
-replace postly/proto => ../../proto
+replace postly/proto => ../../pkg/proto
 
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect

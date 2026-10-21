@@ -12,7 +12,7 @@ require (
 	postly/proto v0.0.0
 )
 
-replace postly/proto => ../../proto
+replace postly/proto => ../../pkg/proto
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

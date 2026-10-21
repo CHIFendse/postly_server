@@ -4,13 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	"postly/pkg/events"
+	"postly/pkg/kafkax"
 	friendspb "postly/proto/friends"
+
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 const wsPubPrefix = "ws:user:"
@@ -19,10 +23,11 @@ type Friends struct {
 	friendspb.UnimplementedFriendsServiceServer
 	db    *sql.DB
 	cache *redis.Client
+	k     *kafkax.Producer
 }
 
-func New(db *sql.DB, cache *redis.Client) *Friends {
-	return &Friends{db: db, cache: cache}
+func New(db *sql.DB, cache *redis.Client, k *kafkax.Producer) *Friends {
+	return &Friends{db: db, cache: cache, k: k}
 }
 
 func (s *Friends) DeleteFriend(ctx context.Context, req *friendspb.DeleteFriendReq) (*emptypb.Empty, error) {
@@ -79,7 +84,11 @@ func (s *Friends) SendFriendRequest(ctx context.Context, req *friendspb.SendFrie
 		"request_id": reqID,
 	})
 	s.cache.Publish(ctx, wsPubPrefix+req.ReceiverId, payload)
-
+	e := events.NewEvent(events.FriendRequestCreated, req.SenderId, 
+		[]string{req.ReceiverId}, map[string]string{"request_id": reqID}, nil)
+	if err := s.k.PublishEvent(e); err != nil {
+		log.Printf("error of publish friend request: %v\n", err)
+	}
 	return &friendspb.SendFriendRequestResp{RequestId: reqID, ReceiverId: req.ReceiverId}, nil
 }
 
@@ -143,7 +152,7 @@ func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.Accept
 		payload, _ := json.Marshal(map[string]string{
 			"type":      "FRIEND_ACCEPTED",
 			"friend_id": pair[1],
-			"actor_id": req.UserId,
+			"actor_id":  req.UserId,
 		})
 		s.cache.Publish(ctx, wsPubPrefix+pair[0], payload)
 	}
