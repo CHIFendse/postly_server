@@ -37,7 +37,7 @@ func main() {
 	srv := &http.Server{Addr: addr, Handler: middlewares.Chain(
 		mux, middlewares.RequestIDMiddleware(),
 		middlewares.LoggingMiddleware(), middlewares.RecoveryMiddleware(),
-		middlewares.CORSMiddleware(), middlewares.RateLimitingMiddleware(5, 10),
+		middlewares.CORSMiddleware(), middlewares.RateLimitingMiddleware(20, 40),
 	)}
 
 	quit := make(chan os.Signal, 1)
