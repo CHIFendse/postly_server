@@ -84,7 +84,7 @@ func (s *Friends) SendFriendRequest(ctx context.Context, req *friendspb.SendFrie
 		"request_id": reqID,
 	})
 	s.cache.Publish(ctx, wsPubPrefix+req.ReceiverId, payload)
-	e := events.NewEvent(events.FriendRequestCreated, req.SenderId, 
+	e := events.NewEvent(events.FriendRequestCreated, req.SenderId,
 		[]string{req.ReceiverId}, map[string]string{"request_id": reqID}, nil)
 	if err := s.k.PublishEvent(e); err != nil {
 		log.Printf("error of publish friend request: %v\n", err)
@@ -155,6 +155,11 @@ func (s *Friends) AcceptFriendRequest(ctx context.Context, req *friendspb.Accept
 			"actor_id":  req.UserId,
 		})
 		s.cache.Publish(ctx, wsPubPrefix+pair[0], payload)
+	}
+	e := events.NewEvent(events.FriendRequestAccepted, req.UserId,
+		[]string{senderID}, map[string]string{"request_id": req.RequestId}, nil)
+	if err := s.k.PublishEvent(e); err != nil {
+		log.Printf("error of publish friend request accepted: %v\n", err)
 	}
 
 	return &friendspb.AcceptFriendRequestResp{SenderId: senderID}, nil
