@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
@@ -20,8 +19,6 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("cannot load .env")
 	}
-
-	checkKafka()
 
 	c := clients.New()
 
@@ -64,30 +61,6 @@ func main() {
 		}
 	}
 
-}
-
-func checkKafka() {
-	cfg := &kafka.ConfigMap{
-		"bootstrap.servers": getenv("KAFKA_BROKERS", "localhost:9092"),
-	}
-	if proto := getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT"); proto != "PLAINTEXT" {
-		cfg.SetKey("security.protocol", proto)
-		cfg.SetKey("sasl.mechanisms", "PLAIN")
-		cfg.SetKey("sasl.username", os.Getenv("KAFKA_SASL_USERNAME"))
-		cfg.SetKey("sasl.password", os.Getenv("KAFKA_SASL_PASSWORD"))
-	}
-
-	a, err := kafka.NewAdminClient(cfg)
-	if err != nil {
-		log.Fatalf("kafka client: %v", err)
-	}
-	defer a.Close()
-
-	md, err := a.GetMetadata(nil, true, 5000)
-	if err != nil {
-		log.Fatalf("kafka недоступна: %v", err)
-	}
-	log.Printf("kafka OK: брокеров %d, топиков %d", len(md.Brokers), len(md.Topics))
 }
 
 func getenv(key, fallback string) string {
