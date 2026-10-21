@@ -10,7 +10,7 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
-var sessionTimeout = 5000
+var sessionTimeout = 10000
 
 type Handler interface {
 	HandleMessage(message []byte, offset kafka.Offset) error
