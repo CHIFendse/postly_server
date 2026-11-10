@@ -322,25 +322,37 @@ func (s *Messaging) notifyDeleteMessage(chatID, msgID, lastMessage, lastSenderID
 		s.cache.Publish(ctx, wsPubPrefix+uid, payload)
 	}
 }
-
 func (s *Messaging) GetMoreMessages(
     ctx context.Context,
     req *msgpb.GetMoreMessagesRequest,
 ) (*msgpb.GetMoreMessagesResponse, error) {
 
+    // Если дата пришла в миллисекундах (13 знаков), переводим в секунды для Postgres
+    createdAtSec := req.LastMessageCreatedAt
+    if createdAtSec > 1e11 {
+        createdAtSec /= 1000
+    }
+
     rows, err := s.db.QueryContext(ctx, `
-        SELECT id, chat_id, sender_id, text, EXTRACT(EPOCH FROM created_at)::bigint, 
-			COALESCE(type, ''), COALESCE(file_url, ''), COALESCE(file_size, ''), COALESCE(file_name, '')
-		FROM messages
-		WHERE chat_id = $1
-		AND (
-			-- Если курсор пустой (первая загрузка) — отдаем просто самые свежие
-			$2 = 0 
-			OR (created_at < to_timestamp($2) OR (created_at = to_timestamp($2) AND id < $3))
-		)
-		ORDER BY created_at DESC, id DESC
-		LIMIT 30;
-    `, req.ChatId, req.LastMessageCreatedAt, req.LastMessageId)
+        SELECT id, 
+               chat_id, 
+               sender_id, 
+               text, 
+               EXTRACT(EPOCH FROM created_at)::BIGINT, 
+               COALESCE(type, 'text'), 
+               COALESCE(file_url, ''), 
+               COALESCE(file_size::TEXT, ''), 
+               COALESCE(file_name, '')
+        FROM messages
+        WHERE chat_id = $1
+        AND (
+            $2::BIGINT = 0 
+            OR created_at < to_timestamp($2::DOUBLE PRECISION)
+            OR (created_at = to_timestamp($2::DOUBLE PRECISION) AND id < $3)
+        )
+        ORDER BY created_at DESC, id DESC
+        LIMIT 30;
+    `, req.ChatId, createdAtSec, req.LastMessageId)
     if err != nil {
         return nil, status.Error(codes.Internal, err.Error())
     }
