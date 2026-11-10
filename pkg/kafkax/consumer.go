@@ -69,9 +69,6 @@ func (c *Consumer) Start() {
 func (c *Consumer) Stop() error {
 	if c == nil { return fmt.Errorf("consumer struct empty") }
 	c.stop.Store(true)
-	if _, err := c.consumer.Commit(); err != nil {
-		log.Printf("stop error consumer: %v\n", err)
-	}
 
 	return c.consumer.Close()
 }

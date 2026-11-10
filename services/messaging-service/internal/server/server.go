@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -233,7 +234,8 @@ func (s *Messaging) DeleteMessage(ctx context.Context, req *msgpb.DeleteMessageR
 		`SELECT text, sender_id, type
 		 FROM messages
 		 WHERE chat_id=$1
-		 ORDER BY created_at DESC
+		 ORDER
+		 BY created_at DESC
 		 LIMIT 1`,
 		chatID,
 	).Scan(&lastText, &lastSender, &lastType)
@@ -333,4 +335,82 @@ func (s *Messaging) notifyDeleteMessage(chatID, msgID, lastMessage, lastSenderID
 	for _, uid := range resp.UserIds {
 		s.cache.Publish(ctx, wsPubPrefix+uid, payload)
 	}
+}
+
+
+func (s *Messaging) GetMoreMessages(
+	ctx context.Context,
+	req *msgpb.GetMoreMessagesRequest,
+) (*msgpb.GetMoreMessagesResponse, error) {
+
+	key := fmt.Sprintf("%s%s:%d:%s", msgCachePrefix, req.ChatId, req.LastMessageCreatedAt, req.LastMessageId)
+
+	if cached, err := s.cache.Get(ctx, key).Bytes(); err == nil {
+		var resp msgpb.GetMoreMessagesResponse
+
+		if json.Unmarshal(cached, &resp) == nil {
+			return &resp, nil
+		}
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, chat_id, sender_id, text, created_at, type, file_url, file_size, file_name
+		FROM messages
+		WHERE chat_id = $1
+		AND (
+			created_at < $2 
+			OR (created_at = $2 AND id < $3)
+		)
+		ORDER BY created_at DESC, id DESC
+		LIMIT 30;
+	`, req.ChatId, req.LastMessageCreatedAt, req.LastMessageId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer rows.Close()
+
+	resp := &msgpb.GetMoreMessagesResponse{
+		Messages: make([]*msgpb.Message, 0, 30),
+	}
+
+	for rows.Next() {
+		m := &msgpb.Message{}
+
+		if err := rows.Scan(
+			&m.Id,
+			&m.ChatId,
+			&m.SenderId,
+			&m.Text,
+			&m.CreatedAt,
+			&m.Type,
+			&m.FileUrl,
+			&m.FileSize,
+			&m.FileName,
+		); err != nil {
+			return nil, status.Error(
+				codes.Internal,
+				err.Error(),
+			)
+		}
+
+		resp.Messages = append(
+			resp.Messages,
+			m,
+		)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, status.Error(
+			codes.Internal,
+			err.Error(),
+		)
+	}
+
+	if len(resp.Messages) > 0 {
+        if data, err := json.Marshal(resp); err == nil {
+            s.cache.Set(ctx, key, data, msgCacheTTL)
+        }
+    }
+
+	return resp, nil
 }
