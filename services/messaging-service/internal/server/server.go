@@ -43,29 +43,34 @@ func (s *Messaging) GetMessages(
 
 	if cached, err := s.cache.Get(ctx, key).Bytes(); err == nil {
 		var resp msgpb.GetMessagesResponse
-
 		if json.Unmarshal(cached, &resp) == nil {
 			return &resp, nil
 		}
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, chat_id, sender_id, text, EXTRACT(EPOCH FROM created_at)::bigint, 
-			COALESCE(type, ''), COALESCE(file_url, ''), COALESCE(file_size, ''), COALESCE(file_name, '')
+		SELECT id,
+		       chat_id,
+		       sender_id,
+		       text,
+		       EXTRACT(EPOCH FROM created_at)::BIGINT,
+		       COALESCE(type, 'text'),
+		       COALESCE(file_url, ''),
+		       COALESCE(file_size::TEXT, ''),
+		       COALESCE(file_name, '')
 		FROM messages
 		WHERE chat_id = $1
 		ORDER BY created_at DESC, id DESC
 		LIMIT 30;
 	`, req.ChatId)
 	if err != nil {
-		return nil, status.Error(
-			codes.Internal,
-			err.Error(),
-		)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer rows.Close()
 
-	resp := &msgpb.GetMessagesResponse{}
+	resp := &msgpb.GetMessagesResponse{
+		Messages: make([]*msgpb.Message, 0, 30),
+	}
 
 	for rows.Next() {
 		m := &msgpb.Message{}
@@ -81,32 +86,20 @@ func (s *Messaging) GetMessages(
 			&m.FileSize,
 			&m.FileName,
 		); err != nil {
-			return nil, status.Error(
-				codes.Internal,
-				err.Error(),
-			)
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
-		resp.Messages = append(
-			resp.Messages,
-			m,
-		)
+		resp.Messages = append(resp.Messages, m)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, status.Error(
-			codes.Internal,
-			err.Error(),
-		)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if data, err := json.Marshal(resp); err == nil {
-		s.cache.Set(
-			ctx,
-			key,
-			data,
-			msgCacheTTL,
-		)
+	if len(resp.Messages) > 0 {
+		if data, err := json.Marshal(resp); err == nil {
+			s.cache.Set(ctx, key, data, msgCacheTTL)
+		}
 	}
 
 	return resp, nil

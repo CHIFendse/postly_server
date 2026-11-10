@@ -114,7 +114,6 @@ func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 			http.Error(w, "chat_id required", http.StatusBadRequest)
 			return
 		}
-
 		resp, err := c.Messaging.GetMessages(r.Context(), &msgpb.GetMessagesRequest{ChatId: chatID})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
