@@ -61,7 +61,7 @@ func (s *Messaging) GetMessages(
 		       COALESCE(file_name, '')
 		FROM messages
 		WHERE chat_id = $1
-		ORDER BY created_at ASC
+		ORDER BY created_at DESC
 	`, req.ChatId)
 	if err != nil {
 		return nil, status.Error(
