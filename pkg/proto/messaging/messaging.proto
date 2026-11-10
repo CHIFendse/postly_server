@@ -57,7 +57,7 @@ message DeleteChatMsgsResponse { bool ok = 1; }
 message GetMoreMessagesRequest {
   string chat_id = 1;
 	string last_message_id = 2;
-	string last_message_created_at = 3;
+	int64 last_message_created_at = 3;
 }
 
 message GetMoreMessagesResponse { repeated Message messages = 1; }

@@ -654,7 +654,7 @@ type GetMoreMessagesRequest struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	ChatId               string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	LastMessageId        string                 `protobuf:"bytes,2,opt,name=last_message_id,json=lastMessageId,proto3" json:"last_message_id,omitempty"`
-	LastMessageCreatedAt string                 `protobuf:"bytes,3,opt,name=last_message_created_at,json=lastMessageCreatedAt,proto3" json:"last_message_created_at,omitempty"`
+	LastMessageCreatedAt int64                  `protobuf:"varint,3,opt,name=last_message_created_at,json=lastMessageCreatedAt,proto3" json:"last_message_created_at,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -703,11 +703,11 @@ func (x *GetMoreMessagesRequest) GetLastMessageId() string {
 	return ""
 }
 
-func (x *GetMoreMessagesRequest) GetLastMessageCreatedAt() string {
+func (x *GetMoreMessagesRequest) GetLastMessageCreatedAt() int64 {
 	if x != nil {
 		return x.LastMessageCreatedAt
 	}
-	return ""
+	return 0
 }
 
 type GetMoreMessagesResponse struct {
@@ -806,7 +806,7 @@ const file_messaging_messaging_proto_rawDesc = "" +
 	"\x16GetMoreMessagesRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12&\n" +
 	"\x0flast_message_id\x18\x02 \x01(\tR\rlastMessageId\x125\n" +
-	"\x17last_message_created_at\x18\x03 \x01(\tR\x14lastMessageCreatedAt\"I\n" +
+	"\x17last_message_created_at\x18\x03 \x01(\x03R\x14lastMessageCreatedAt\"I\n" +
 	"\x17GetMoreMessagesResponse\x12.\n" +
 	"\bmessages\x18\x01 \x03(\v2\x12.messaging.MessageR\bmessages2\x85\x04\n" +
 	"\x10MessagingService\x12L\n" +

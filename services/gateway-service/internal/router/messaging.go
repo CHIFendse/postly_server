@@ -246,7 +246,7 @@ func handleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
 		var body struct {
 				ChatID string `json:"chat_id"`
 				LastMessageId string `json:"last_message_id"`
-				LastMessageCreatedAt string `json:"last_message_created_at"`
+				LastMessageCreatedAt int64 `json:"last_message_created_at"`
 			}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "некорректный json", http.StatusBadRequest)
