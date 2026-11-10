@@ -50,18 +50,12 @@ func (s *Messaging) GetMessages(
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id,
-		       chat_id,
-		       sender_id,
-		       text,
-		       EXTRACT(EPOCH FROM created_at)::INT,
-		       COALESCE(type, 'text'),
-		       COALESCE(file_url, ''),
-		       COALESCE(file_size::TEXT, ''),
-		       COALESCE(file_name, '')
+		SELECT id, chat_id, sender_id, text, EXTRACT(EPOCH FROM created_at)::bigint, 
+			COALESCE(type, ''), COALESCE(file_url, ''), COALESCE(file_size, ''), COALESCE(file_name, '')
 		FROM messages
 		WHERE chat_id = $1
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
+		LIMIT 30;
 	`, req.ChatId)
 	if err != nil {
 		return nil, status.Error(
