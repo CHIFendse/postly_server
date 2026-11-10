@@ -242,7 +242,7 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 
 
 
-func HandleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
+func handleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 				ChatID string `json:"chat_id"`
