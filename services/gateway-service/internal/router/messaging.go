@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"gateway-service/internal/clients"
@@ -18,6 +19,7 @@ func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
 	mux.Handle("/sendMessage", 	 middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/deleteMessage", middlewares.Chain(handleDeleteMessage(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/getUploadUrl",  middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getMoreMessages", middlewares.Chain(handleGetMoreMessages(c), middlewares.JWTMiddleware(c)))
 }
 
 var folderByMsgType = map[string]string{
@@ -235,5 +237,92 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"chat_id": resp.ChatId})
+	}
+}
+
+
+
+func HandleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+				ChatID string `json:"chat_id"`
+				LastMessageId string `json:"last_message_id"`
+				LastMessageCreatedAt string `json:"last_message_created_at"`
+			}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "некорректный json", http.StatusBadRequest)
+			return
+		}
+		chatID := body.ChatID
+		if chatID == "" {
+			chatID = r.URL.Query().Get("chat_id")
+		}
+		if chatID == "" {
+			http.Error(w, "chat_id required", http.StatusBadRequest)
+			return
+		}
+
+		resp, err := c.Messaging.GetMoreMessages(r.Context(), &msgpb.GetMoreMessagesRequest{
+			ChatId: chatID, 
+			LastMessageId:        body.LastMessageId,
+			LastMessageCreatedAt: body.LastMessageCreatedAt,
+		})
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения сообщений"})
+			return
+		}
+
+		usernames := map[string]string{}
+		for _, m := range resp.Messages {
+			if _, ok := usernames[m.SenderId]; !ok {
+				u, err := c.User.GetUserByUserId(r.Context(), &userpb.GetUserByUserIdRequest{UserId: m.SenderId})
+				if err == nil {
+					usernames[m.SenderId] = u.Username
+				}
+			}
+		}
+
+		type msgOut struct {
+			Id        string `json:"id"`
+			ChatId    string `json:"chat_id"`
+			SenderId  string `json:"sender_id"`
+			Text      string `json:"text"`
+			CreatedAt int64  `json:"created_at"`
+			Username  string `json:"username"`
+			Type      string `json:"message_type"`
+			FileURL   string `json:"file_url"`
+			FileName  string `json:"file_name"`
+			FileSize  string `json:"file_size"`
+		}
+		out := make([]msgOut, 0, len(resp.Messages))
+		for _, m := range resp.Messages {
+			msgType := m.Type
+			if msgType == "" {
+				msgType = "text"
+			}
+
+			fileURL := ""
+			if msgType != "text" && m.FileUrl != "" {
+				fileURL = fileURLFor(m.Id)
+			}
+
+			out = append(out, msgOut{
+				Id:        m.Id,
+				ChatId:    m.ChatId,
+				SenderId:  m.SenderId,
+				Text:      m.Text,
+				CreatedAt: m.CreatedAt * 1000,
+				Username:  usernames[m.SenderId],
+				Type:      msgType,
+				FileURL:   fileURL,
+				FileName:  m.FileName,
+				FileSize:  m.FileSize,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
 	}
 }
