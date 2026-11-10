@@ -327,32 +327,32 @@ func (s *Messaging) GetMoreMessages(
     req *msgpb.GetMoreMessagesRequest,
 ) (*msgpb.GetMoreMessagesResponse, error) {
 
-    // Если дата пришла в миллисекундах (13 знаков), переводим в секунды для Postgres
-    createdAtSec := req.LastMessageCreatedAt
-    if createdAtSec > 1e11 {
-        createdAtSec /= 1000
-    }
-
     rows, err := s.db.QueryContext(ctx, `
-        SELECT id, 
-               chat_id, 
-               sender_id, 
-               text, 
-               EXTRACT(EPOCH FROM created_at)::BIGINT, 
-               COALESCE(type, 'text'), 
-               COALESCE(file_url, ''), 
-               COALESCE(file_size::TEXT, ''), 
-               COALESCE(file_name, '')
-        FROM messages
-        WHERE chat_id = $1
-        AND (
-            $2::BIGINT = 0 
-            OR created_at < to_timestamp($2::DOUBLE PRECISION)
-            OR (created_at = to_timestamp($2::DOUBLE PRECISION) AND id < $3)
+        WITH cursor_msg AS (
+            SELECT created_at, id 
+            FROM messages 
+            WHERE id = $2
+            LIMIT 1
         )
-        ORDER BY created_at DESC, id DESC
+        SELECT m.id, 
+               m.chat_id, 
+               m.sender_id, 
+               m.text, 
+               EXTRACT(EPOCH FROM m.created_at)::BIGINT, 
+               COALESCE(m.type, 'text'), 
+               COALESCE(m.file_url, ''), 
+               COALESCE(m.file_size::TEXT, ''), 
+               COALESCE(m.file_name, '')
+        FROM messages m
+        LEFT JOIN cursor_msg c ON true
+        WHERE m.chat_id = $1
+          AND (
+              c.id IS NULL 
+              OR (m.created_at, m.id) < (c.created_at, c.id)
+          )
+        ORDER BY m.created_at DESC, m.id DESC
         LIMIT 30;
-    `, req.ChatId, createdAtSec, req.LastMessageId)
+    `, req.ChatId, req.LastMessageId)
     if err != nil {
         return nil, status.Error(codes.Internal, err.Error())
     }
@@ -364,7 +364,6 @@ func (s *Messaging) GetMoreMessages(
 
     for rows.Next() {
         m := &msgpb.Message{}
-
         if err := rows.Scan(
             &m.Id,
             &m.ChatId,
@@ -378,7 +377,6 @@ func (s *Messaging) GetMoreMessages(
         ); err != nil {
             return nil, status.Error(codes.Internal, err.Error())
         }
-
         resp.Messages = append(resp.Messages, m)
     }
 
