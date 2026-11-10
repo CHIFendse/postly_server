@@ -244,10 +244,10 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 func handleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-				ChatID string `json:"chat_id"`
-				LastMessageId string `json:"last_message_id"`
-				LastMessageCreatedAt int64 `json:"last_message_created_at"`
-			}
+			ChatID string `json:"chat_id"`
+			LastMessageId string `json:"last_message_id"`
+			LastMessageCreatedAt int64 `json:"last_message_created_at"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "некорректный json", http.StatusBadRequest)
 			return

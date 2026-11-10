@@ -342,24 +342,17 @@ func (s *Messaging) GetMoreMessages(
 ) (*msgpb.GetMoreMessagesResponse, error) {
 
     rows, err := s.db.QueryContext(ctx, `
-        SELECT 
-            id, 
-            chat_id, 
-            sender_id, 
-            text, 
-            EXTRACT(EPOCH FROM created_at)::bigint, 
-            COALESCE(type, ''), 
-            COALESCE(file_url, ''), 
-            COALESCE(file_size, ''), 
-            COALESCE(file_name, '')
-        FROM messages
-        WHERE chat_id = $1
-        AND (
-            created_at < to_timestamp($2) 
-            OR (created_at = to_timestamp($2) AND id < $3)
-        )
-        ORDER BY created_at DESC, id DESC
-        LIMIT 30;
+        SELECT id, chat_id, sender_id, text, EXTRACT(EPOCH FROM created_at)::bigint, 
+			COALESCE(type, ''), COALESCE(file_url, ''), COALESCE(file_size, ''), COALESCE(file_name, '')
+		FROM messages
+		WHERE chat_id = $1
+		AND (
+			-- Если курсор пустой (первая загрузка) — отдаем просто самые свежие
+			$2 = 0 
+			OR (created_at < to_timestamp($2) OR (created_at = to_timestamp($2) AND id < $3))
+		)
+		ORDER BY created_at DESC, id DESC
+		LIMIT 30;
     `, req.ChatId, req.LastMessageCreatedAt, req.LastMessageId)
     if err != nil {
         return nil, status.Error(codes.Internal, err.Error())
