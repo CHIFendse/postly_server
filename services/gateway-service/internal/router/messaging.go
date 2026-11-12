@@ -2,19 +2,19 @@ package router
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
 	"gateway-service/internal/clients"
 	"gateway-service/internal/router/middlewares"
-	chatpb "postly/proto/chat"
 	msgpb "postly/proto/messaging"
 	s3pb "postly/proto/s3"
 	userpb "postly/proto/user"
 
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
@@ -290,27 +290,25 @@ func handleDeleteMessage(c *clients.Clients, cache *redis.Client) http.HandlerFu
 			SenderId:  userID,
 		})
 		if err != nil {
+			st, _ := status.FromError(err)
+			code := http.StatusInternalServerError
+			switch st.Code() {
+			case codes.NotFound:
+				code = http.StatusNotFound
+			case codes.PermissionDenied:
+				code = http.StatusForbidden
+			case codes.InvalidArgument:
+				code = http.StatusBadRequest
+			}
+			log.Printf("[ERROR] Delete Message error: %v (msg=%s, user=%s)", err, data.MessageID, userID)
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			fmt.Printf("[ERROR] Delete Message error: %v (msg=%s, user=%s)", err, data.MessageID, userID)
+			w.WriteHeader(code)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
 			return
 		}
 
-		// Оповещаем участников через сокет
-		if resp.ChatId != "" {
-			pts, pErr := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: resp.ChatId})
-			if pErr == nil && pts != nil {
-				delPayload, _ := json.Marshal(map[string]string{
-					"type":       "DELETE_MESSAGE",
-					"chat_id":    resp.ChatId,
-					"message_id": data.MessageID,
-				})
-				for _, uid := range pts.UserIds {
-					cache.Publish(r.Context(), "ws:user:"+uid, delPayload)
-				}
-			}
-		}
+		// DELETE_MESSAGE по сокету рассылает messaging-service (с новым last_message).
+		// Здесь не дублируем, иначе клиенты получают событие дважды.
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"chat_id": resp.ChatId})

@@ -187,63 +187,78 @@ func (s *Messaging) GetFileInfo(ctx context.Context, req *msgpb.GetFileInfoReque
 }
 
 func (s *Messaging) DeleteMessage(ctx context.Context, req *msgpb.DeleteMessageRequest) (*msgpb.DeleteMessageResponse, error) {
-    var chatID string
+	var chatID, fileURL, msgType string
 
-    // 1. Получаем chat_id удаляемого сообщения
-    err := s.db.QueryRowContext(ctx, 
-        `SELECT chat_id FROM messages WHERE id = $1 AND sender_id = $2`, 
-        req.MessageId, req.SenderId,
-    ).Scan(&chatID)
-    if err == sql.ErrNoRows {
-        return nil, status.Error(codes.NotFound, "сообщение не найдено или нет прав")
-    }
-    if err != nil {
-        return nil, status.Error(codes.Internal, err.Error())
-    }
+	// 1. Данные удаляемого сообщения (только своего)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT chat_id, COALESCE(file_url, ''), COALESCE(type, 'text')
+		 FROM messages WHERE id = $1 AND sender_id = $2`,
+		req.MessageId, req.SenderId,
+	).Scan(&chatID, &fileURL, &msgType)
+	if err == sql.ErrNoRows {
+		return nil, status.Error(codes.NotFound, "сообщение не найдено или нет прав")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 
-    // 2. Удаляем сообщение
-    _, err = s.db.ExecContext(ctx, `DELETE FROM messages WHERE id = $1`, req.MessageId)
-    if err != nil {
-        return nil, status.Error(codes.Internal, err.Error())
-    }
+	// 2. Удаляем сообщение
+	res, err := s.db.ExecContext(ctx, `DELETE FROM messages WHERE id = $1 AND sender_id = $2`, req.MessageId, req.SenderId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	// Параллельный запрос уже удалил это сообщение — второй раз ничего не делаем
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, status.Error(codes.NotFound, "сообщение уже удалено")
+	}
 
-    s.cache.Del(ctx, msgCachePrefix+chatID)
+	if fileURL != "" && msgType != "text" {
+		_, _ = s.s3Client.DeleteFile(ctx, &s3pb.DeleteFileRequest{S3Key: fileURL})
+	}
 
-    // 3. Ищем предыдущее актуальное сообщение в этом чате
-    var prevText, prevSenderID, prevType string
-    err = s.db.QueryRowContext(ctx, `
-        SELECT text, sender_id, type 
-        FROM messages 
-        WHERE chat_id = $1 
-        ORDER BY created_at DESC 
-        LIMIT 1
-    `, chatID).Scan(&prevText, &prevSenderID, &prevType)
+	s.cache.Del(ctx, msgCachePrefix+chatID)
 
-    if err == sql.ErrNoRows {
-        // Чат пуст
-        prevText = ""
-        prevSenderID = ""
-    } else if err == nil {
-        switch prevType {
-        case "image":
-            prevText = "Фотография"
-        case "file":
-            prevText = "Файл"
-        case "voice":
-            prevText = "Голосовое сообщение"
-        case "video":
-            prevText = "Видео"
-        }
-    }
+	// 3. Ищем предыдущее актуальное сообщение в этом чате
+	var prevText, prevSenderID, prevType string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT text, sender_id, COALESCE(type, 'text')
+		FROM messages
+		WHERE chat_id = $1
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1
+	`, chatID).Scan(&prevText, &prevSenderID, &prevType)
 
-    // 4. Синхронизируем chat-service с реальным последним сообщением
-    _, _ = s.chatSvc.UpdateLastMessage(ctx, &chatpb.UpdateLastMessageRequest{
-        ChatId:   chatID,
-        Text:     prevText,
-        SenderId: prevSenderID,
-    })
+	if err == sql.ErrNoRows {
+		// Чат пуст
+		prevText = ""
+		prevSenderID = ""
+	} else if err == nil {
+		switch prevType {
+		case "image":
+			prevText = "Фотография..."
+		case "file":
+			prevText = "Файл..."
+		case "voice":
+			prevText = "Голосовое сообщение..."
+		case "video":
+			prevText = "Видео..."
+		}
+	} else {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 
-    return &msgpb.DeleteMessageResponse{ChatId: chatID}, nil
+	// 4. Синхронизируем chat-service с реальным последним сообщением
+	_, _ = s.chatSvc.UpdateLastMessage(ctx, &chatpb.UpdateLastMessageRequest{
+		ChatId:   chatID,
+		Text:     prevText,
+		SenderId: prevSenderID,
+	})
+
+	// 5. Единственная рассылка DELETE_MESSAGE — с новым last_message.
+	// Шлём после UpdateLastMessage, чтобы клиентский refetch списка чатов был свежим.
+	go s.notifyDeleteMessage(chatID, req.MessageId, prevText, prevSenderID)
+
+	return &msgpb.DeleteMessageResponse{ChatId: chatID}, nil
 }
 
 func (s *Messaging) DeleteChatMessages(ctx context.Context, req *msgpb.DeleteChatMsgsRequest) (*msgpb.DeleteChatMsgsResponse, error) {
