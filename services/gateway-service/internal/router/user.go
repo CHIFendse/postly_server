@@ -19,9 +19,11 @@ import (
 	userpb "postly/proto/user"
 )
 
-var registerCfg *middlewares.AttemptsConfig = &middlewares.AttemptsConfig{Name: "register",
+var registerCfg *middlewares.AttemptsConfig = &middlewares.AttemptsConfig{
+	Name: "register",
 	MaxAttempts: 5, FailWindow: 15 * time.Minute, BaseCooldown: 15 * time.Minute,
-	MaxCooldown: 15 * time.Minute, StrikeTTL: 24 * time.Hour, Refund: false}
+	MaxCooldown: 15 * time.Minute, StrikeTTL: 24 * time.Hour, Refund: false,
+}
 
 func RegisterUser(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.Handle("/register", middlewares.Chain(handleRegister(c), middlewares.AttemptsMiddleware(cache, registerCfg)))
@@ -31,8 +33,6 @@ func RegisterUser(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.Handle("/getAvatars", middlewares.Chain(handleGetAvatars(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/avatar", middlewares.Chain(HandleAvatar(c), middlewares.JWTMiddleware(c)))
 }
-
-
 
 func avatarURLForKey(key string) string {
 	if key == "" {
@@ -60,6 +60,20 @@ func writeMessage(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"message": msg})
 }
 
+// handleGetAvatarUploadURL godoc
+//	@Summary		Get avatar upload URL
+//	@Description	Generates a pre-signed S3 URL for uploading an avatar image (JPEG, PNG, WebP)
+//	@Tags			user
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.GetAvatarUploadURLRequest	true	"File name and MIME type"
+//	@Success		200		{object}	swagger.GetAvatarUploadURLResponse	"Pre-signed upload URL and S3 key"
+//	@Failure		400		{object}	map[string]string					"Only JPEG, PNG and WebP are supported"
+//	@Failure		401		"Unauthorized"
+//	@Failure		405		{string}	string								"Method not allowed"
+//	@Failure		500		{object}	map[string]string					"Failed to get upload URL"
+//	@Router			/getAvatarUploadUrl [post]
 func handleGetAvatarUploadURL(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -84,12 +98,12 @@ func handleGetAvatarUploadURL(c *clients.Clients) http.HandlerFunc {
 			Folder:      "avatars",
 		})
 		if status.Code(err) == codes.InvalidArgument {
-			writeMessage(w, http.StatusBadRequest, "Поддерживаются только JPEG, PNG и WebP")
+			writeMessage(w, http.StatusBadRequest, "Only JPEG, PNG and WebP are supported")
 			return
 		}
 		if err != nil {
 			log.Printf("[GW] getAvatarUploadUrl user=%s: %v", userID, err)
-			writeMessage(w, http.StatusInternalServerError, "Ошибка получения ссылки для загрузки")
+			writeMessage(w, http.StatusInternalServerError, "Failed to get upload URL")
 			return
 		}
 
@@ -100,6 +114,22 @@ func handleGetAvatarUploadURL(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// handleSetAvatar godoc
+//	@Summary		Set active avatar
+//	@Description	Assigns an uploaded S3 avatar key as the active profile avatar
+//	@Tags			user
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.SetAvatarRequest	true	"S3 key of the uploaded avatar"
+//	@Success		200		{object}	swagger.StatusResponse		"Avatar updated successfully"
+//	@Failure		400		{object}	map[string]string			"Invalid file key"
+//	@Failure		401		"Unauthorized"
+//	@Failure		403		{object}	map[string]string			"Forbidden file key"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Failure		409		{object}	map[string]string			"This avatar is already set"
+//	@Failure		500		{object}	map[string]string			"Failed to set avatar"
+//	@Router			/setAvatar [post]
 func handleSetAvatar(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -116,29 +146,43 @@ func handleSetAvatar(c *clients.Clients) http.HandlerFunc {
 			return
 		}
 		if !ownAvatarKey(data.S3Key, userID) {
-			writeMessage(w, http.StatusForbidden, "Недопустимый ключ файла")
+			writeMessage(w, http.StatusForbidden, "Forbidden file key")
 			return
 		}
 
 		_, err := c.User.SetAvatar(r.Context(), &userpb.SetAvatarRequest{UserId: userID, S3Key: data.S3Key})
 		switch status.Code(err) {
 		case codes.OK:
+			writeJSON(w, http.StatusOK, map[string]bool{"status": true})
 		case codes.AlreadyExists:
-			writeMessage(w, http.StatusConflict, "Эта аватарка уже установлена")
+			writeMessage(w, http.StatusConflict, "This avatar is already set")
 			return
 		case codes.InvalidArgument:
-			writeMessage(w, http.StatusBadRequest, "Недопустимый ключ файла")
+			writeMessage(w, http.StatusBadRequest, "Invalid file key")
 			return
 		default:
 			log.Printf("[GW] setAvatar user=%s: %v", userID, err)
-			writeMessage(w, http.StatusInternalServerError, "Ошибка установки аватарки")
+			writeMessage(w, http.StatusInternalServerError, "Failed to set avatar")
 			return
 		}
-
-		// writeJSON(w, http.StatusOK, map[string]string{"avatar_url": avatarURLForUser(userID)})
 	}
 }
 
+// handleDeleteAvatar godoc
+//	@Summary		Delete avatar
+//	@Description	Removes an avatar from the user profile and deletes the file from S3 storage
+//	@Tags			user
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.DeleteAvatarRequest	true	"S3 key of the avatar to delete"
+//	@Success		200		{object}	swagger.StatusResponse		"Avatar deleted successfully"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		404		{object}	map[string]string			"Avatar not found"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Failure		500		{object}	map[string]string			"Failed to delete avatar"
+//	@Router			/deleteAvatar [post]
 func handleDeleteAvatar(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -159,11 +203,11 @@ func handleDeleteAvatar(c *clients.Clients) http.HandlerFunc {
 		switch status.Code(err) {
 		case codes.OK:
 		case codes.NotFound:
-			writeMessage(w, http.StatusNotFound, "Аватарка не найдена")
+			writeMessage(w, http.StatusNotFound, "Avatar not found")
 			return
 		default:
 			log.Printf("[GW] deleteAvatar user=%s: %v", userID, err)
-			writeMessage(w, http.StatusInternalServerError, "Ошибка удаления аватарки")
+			writeMessage(w, http.StatusInternalServerError, "Failed to delete avatar")
 			return
 		}
 
@@ -175,6 +219,18 @@ func handleDeleteAvatar(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// handleGetAvatars godoc
+//	@Summary		Get avatar history
+//	@Description	Returns a list of all avatars uploaded by a user. Defaults to the authorized user if user_id query parameter is not provided.
+//	@Tags			user
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			user_id	query		string				false	"Optional target user ID"	example("usr_12345")
+//	@Success		200		{array}		swagger.AvatarItem	"List of avatars"
+//	@Failure		401		"Unauthorized"
+//	@Failure		405		{string}	string				"Method not allowed"
+//	@Failure		500		{object}	map[string]string	"Failed to get avatars"
+//	@Router			/getAvatars [get]
 func handleGetAvatars(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -189,7 +245,7 @@ func handleGetAvatars(c *clients.Clients) http.HandlerFunc {
 		resp, err := c.User.GetAvatars(r.Context(), &userpb.GetAvatarsRequest{UserId: userID})
 		if err != nil {
 			log.Printf("[GW] getAvatars user=%s: %v", userID, err)
-			writeMessage(w, http.StatusInternalServerError, "Ошибка получения аватарок")
+			writeMessage(w, http.StatusInternalServerError, "Failed to get avatars")
 			return
 		}
 
@@ -210,6 +266,22 @@ func handleGetAvatars(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// HandleAvatar godoc
+//	@Summary		Get avatar image
+//	@Description	Streams the binary image of an avatar from S3 by key or user_id
+//	@Tags			user
+//	@Produce		image/*
+//	@Produce		octet-stream
+//	@Security		BearerAuth
+//	@Param			key		query		string	false	"Avatar S3 key"		example("avatars/usr_12345/avatar.png")
+//	@Param			user_id	query		string	false	"Target user ID"	example("usr_12345")
+//	@Success		200		{file}		binary	"Avatar binary stream"
+//	@Failure		400		{string}	string	"key or user_id required"
+//	@Failure		401		{string}	string	"Unauthorized"
+//	@Failure		404		{string}	string	"Not found"
+//	@Failure		405		{string}	string	"Method not allowed"
+//	@Failure		500		{string}	string	"Internal error"
+//	@Router			/avatar [get]
 func HandleAvatar(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -251,6 +323,19 @@ func HandleAvatar(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// handleRegister godoc
+//	@Summary		User registration
+//	@Description	Registers a new user and sets initial authentication credentials. Rate limited by IP/username.
+//	@Tags			user
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		swagger.RegisterRequest	true	"Registration details"
+//	@Success		200		{object}	swagger.StatusResponse	"Registered successfully"
+//	@Failure		400		{string}	string					"Bad request"
+//	@Failure		405		{string}	string					"Method not allowed"
+//	@Failure		409		{object}	map[string]string		"Username or email already exists"
+//	@Failure		500		{object}	map[string]string		"Registration failed. Try again."
+//	@Router			/register [post]
 func handleRegister(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -277,12 +362,12 @@ func handleRegister(c *clients.Clients) http.HandlerFunc {
 			log.Printf("user.Register error: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
-			msg := "Ошибка регистрации"
+			msg := "Registration error"
 			if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "23505") {
 				if strings.Contains(err.Error(), "username") {
-					msg = "Пользователь с таким именем уже существует"
+					msg = "Username already exists"
 				} else if strings.Contains(err.Error(), "email") {
-					msg = "Пользователь с такой почтой уже существует"
+					msg = "Email already exists"
 				}
 			}
 			json.NewEncoder(w).Encode(map[string]string{"message": msg})
@@ -299,7 +384,7 @@ func handleRegister(c *clients.Clients) http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка регистрации. Попробуйте снова."})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Registration failed. Try again."})
 			return
 		}
 

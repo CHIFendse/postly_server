@@ -16,22 +16,32 @@ import (
 )
 
 func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.Handle("/getChats",		middlewares.Chain(HandleGetChats(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/getGroups", 	middlewares.Chain(HandleGetGroups(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/createChat", 	middlewares.Chain(handleCreateChat(c, cache), middlewares.JWTMiddleware(c)))
-	mux.Handle("/createGroup", 	middlewares.Chain(handleCreateGroup(c, cache), middlewares.JWTMiddleware(c)))
-	mux.Handle("/clearChat", 	middlewares.Chain(handleClearChat(c, cache), middlewares.JWTMiddleware(c)))
-	mux.Handle("/deleteChat", 	middlewares.Chain(handleDeleteChat(c, cache), middlewares.JWTMiddleware(c)))
-	mux.Handle("/deleteGroup", 	middlewares.Chain(handleDeleteGroup(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getChats",    middlewares.Chain(HandleGetChats(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getGroups",   middlewares.Chain(HandleGetGroups(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/createChat",  middlewares.Chain(handleCreateChat(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/createGroup", middlewares.Chain(handleCreateGroup(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/clearChat",   middlewares.Chain(handleClearChat(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteChat",  middlewares.Chain(handleDeleteChat(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteGroup", middlewares.Chain(handleDeleteGroup(c, cache), middlewares.JWTMiddleware(c)))
 }
 
+// HandleGetChats godoc
+//	@Summary		Getting chats
+//	@Description	Returning the list of chats by JWT Token
+//	@Tags			chat
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{array}		initrouter.Chats	"The list of chats"
+//	@Failure		401	"Unauthorized"
+//	@Failure		500	{string}	string	"Error getting chats"
+//	@Router			/getChats [get]
 func HandleGetChats(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		out, err := initrouter.GetChats(r.Context(), c, userID)
 		if err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			http.Error(w, "Error getting chats", http.StatusInternalServerError)
 			return
 		}
 
@@ -40,13 +50,23 @@ func HandleGetChats(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// HandleGetGroups godoc
+//	@Summary		Getting groups
+//	@Description	Getting user groups by JWT Token
+//	@Tags			chat
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{array}		initrouter.Groups	"The list of groups"
+//	@Failure		401	"Unauthorized"
+//	@Failure		500	{string}	string	"Error getting groups"
+//	@Router			/getGroups [get]
 func HandleGetGroups(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		out, err := initrouter.GetGroups(r.Context(), c, userID)
 		if err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			http.Error(w, "Error getting groups", http.StatusInternalServerError)
 			return
 		}
 
@@ -55,6 +75,21 @@ func HandleGetGroups(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// handleCreateChat godoc
+//	@Summary		Creating chat
+//	@Description	Create a new chat if it doesn't exist; otherwise, get its ID
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.CreateChatRequest	true	"username and target_username in the body"
+//	@Success		200		{object}	swagger.CreateChatResponse	"New chat"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		404		{object}	map[string]string			"User was not found"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Failure		500		{object}	map[string]string			"Error creating chat"
+//	@Router			/createChat [post]
 func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -79,7 +114,7 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 		if err != nil {
 			log.Printf("createChat: GetUserByUsername(%q) err: %v", data.Username, err)
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Пользователь не найден"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "User was not found"})
 			return
 		}
 
@@ -90,7 +125,7 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 		if err != nil {
 			log.Printf("createChat: Chat.CreateChat err: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка создания чата"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Error creating chat"})
 			return
 		}
 
@@ -108,6 +143,20 @@ func handleCreateChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 	}
 }
 
+// handleCreateGroup godoc
+//	@Summary		Creating group
+//	@Description	Create a new group if it doesn't exist; otherwise, get its ID
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.CreateGroupRequest	true	"name, members, avatar in the body"
+//	@Success		200		{object}	swagger.CreateGroupResponse	"New group details"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Failure		500		{object}	map[string]string			"Error creating group"
+//	@Router			/createGroup [post]
 func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -149,7 +198,7 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка создания группы"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Error creating group"})
 			return
 		}
 
@@ -178,6 +227,20 @@ func handleCreateGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc
 	}
 }
 
+// handleClearChat godoc
+//	@Summary		Clearing the chat
+//	@Description	Clears message history for a specific chat by ID
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.ClearChatRequest	true	"chat_id in the body"
+//	@Success		200		{object}	map[string]bool				"Status: true"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		403		{object}	map[string]string			"Error clearing chat (forbidden)"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Router			/clearChat [post]
 func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -204,7 +267,7 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 		})
 		if err != nil {
 			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка очистки чата"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Error clearing chat"})
 			return
 		}
 
@@ -226,6 +289,20 @@ func handleClearChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	}
 }
 
+// handleDeleteChat godoc
+//	@Summary		Deleting chat
+//	@Description	Completely deletes a private chat by chat_id
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.DeleteChatRequest	true	"chat_id in the body"
+//	@Success		200		{object}	map[string]bool				"Status: true"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		403		{object}	map[string]string			"Error deleting chat"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Router			/deleteChat [post]
 func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -272,6 +349,20 @@ func handleDeleteChat(c *clients.Clients, cache *redis.Client) http.HandlerFunc 
 	}
 }
 
+// handleDeleteGroup godoc
+//	@Summary		Deleting group
+//	@Description	Completely deletes a group chat by chat_id
+//	@Tags			chat
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.DeleteGroupRequest	true	"chat_id in the body"
+//	@Success		200		{object}	map[string]bool				"Status: true"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		403		{object}	map[string]string			"Error deleting group"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Router			/deleteGroup [post]
 func handleDeleteGroup(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

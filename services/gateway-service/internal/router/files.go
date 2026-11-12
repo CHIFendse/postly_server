@@ -11,10 +11,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"gateway-service/internal/clients"
+	authpb "postly/proto/auth"
 	chatpb "postly/proto/chat"
 	msgpb "postly/proto/messaging"
 	s3pb "postly/proto/s3"
-	authpb "postly/proto/auth"
 )
 
 func fileURLFor(messageID string) string {
@@ -31,7 +31,6 @@ var passRangeHeaders = []string{
 }
 
 func RegisterFiles(mux *http.ServeMux, c *clients.Clients) {
-
 	mux.HandleFunc("/file", handleFile(c))
 }
 
@@ -48,6 +47,25 @@ func authenticate(c *clients.Clients, r *http.Request) (string, bool) {
 	return resp.UserId, true
 }
 
+// handleFile godoc
+//	@Summary		Download or stream a file
+//	@Description	Verifies user membership in the chat containing the target message and proxies the file from S3. Supports HTTP Range requests for media streaming and client caching.
+//	@Tags			files
+//	@Produce		octet-stream
+//	@Produce		image/*
+//	@Produce		video/*
+//	@Security		BearerAuth
+//	@Param			message_id	query		string	true	"Message ID associated with the attachment"	example("alksjNSA212fc")
+//	@Param			Range		header		string	false	"HTTP Range header for chunked streaming (e.g., bytes=0-1024)"
+//	@Success		200			{file}		binary	"Full binary file stream"
+//	@Success		206			{file}		binary	"Partial content (media streaming chunks)"
+//	@Failure		400			{string}	string	"message_id required"
+//	@Failure		401			{string}	string	"Unauthorized"
+//	@Failure		404			{string}	string	"Not found"
+//	@Failure		405			{string}	string	"Method not allowed"
+//	@Failure		500			{string}	string	"Internal error"
+//	@Failure		502			{string}	string	"Bad gateway"
+//	@Router			/file [get]
 func handleFile(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -106,7 +124,6 @@ func handleFile(c *clients.Clients) http.HandlerFunc {
 }
 
 func proxyS3(w http.ResponseWriter, r *http.Request, c *clients.Clients, key, disposition, cacheControl string) {
-
 	urlResp, err := c.S3.GetDownloadUrl(r.Context(), &s3pb.GetDownloadUrlRequest{
 		S3Key:        key,
 		ExpiresInSec: 60,

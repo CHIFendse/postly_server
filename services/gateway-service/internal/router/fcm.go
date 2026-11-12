@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gateway-service/internal/clients"
 	"gateway-service/internal/router/middlewares"
 	"log"
 	"net/http"
@@ -22,6 +23,10 @@ var (
 	fcmGetToken  func(ctx context.Context) (string, error)
 	fcmOnce      sync.Once
 )
+
+func RegisterFCMToken(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
+	mux.Handle("/registerFCMToken", middlewares.Chain(handleRegisterFCMToken(cache), middlewares.JWTMiddleware(c)))
+}
 
 func initFCM() {
 	fcmOnce.Do(func() {
@@ -90,10 +95,23 @@ func getFCMToken(ctx context.Context, cache *redis.Client, userID string) string
 	return t
 }
 
+// handleRegisterFCMToken godoc
+//	@Summary		Register FCM token
+//	@Description	Saves or updates the Firebase Cloud Messaging device token in Redis cache for push notifications
+//	@Tags			fcm
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.FCMRegisterRequest	true	"FCM device token"
+//	@Success		200		{object}	swagger.OKResponse			"Token registered successfully"
+//	@Failure		400		{string}	string						"Bad request (empty token or invalid JSON)"
+//	@Failure		401		"Unauthorized"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Router			/registerFCMToken [post]
 func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		userID, _ := r.Context().Value(middlewares.UserIDKey).(string)
@@ -101,7 +119,7 @@ func handleRegisterFCMToken(cache *redis.Client) http.HandlerFunc {
 			FCMToken string `json:"fcm_token"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.FCMToken == "" {
-			http.Error(w, "bad request", http.StatusBadRequest)
+			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
 		cache.Set(r.Context(), fcmTokenPrefix+userID, body.FCMToken, 0)

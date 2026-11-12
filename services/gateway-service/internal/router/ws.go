@@ -26,6 +26,14 @@ func RegisterWS(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.HandleFunc("/ws", handleWS(c, cache))
 }
 
+// handleWS godoc
+//	@Summary		WebSocket connection upgrade
+//	@Description	Establishes a bidirectional WebSocket connection for real-time messaging, typing indicators, and call signaling. Requires a valid JWT token passed via the token query parameter.
+//	@Tags			websocket
+//	@Param			token	query	string	true	"JWT auth token (e.g. Bearer eyJhbGci... or raw JWT)"	example("eyJhbGciOi...")
+//	@Success		101		"Switching Protocols: successfully upgraded to WebSocket connection"
+//	@Failure		401		{string}	string	"Unauthorized: token is missing, invalid or expired"
+//	@Router			/ws [get]
 func handleWS(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.URL.Query().Get("token"), "Bearer ")

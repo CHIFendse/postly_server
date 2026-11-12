@@ -10,11 +10,17 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
+	_ "postly/docs"
 	"gateway-service/internal/clients"
 	"gateway-service/internal/router"
 	"gateway-service/internal/router/middlewares"
 )
 
+// @title           Gateway Service API
+// @version         1.0
+// @description     API Gateway for all services. All incoming traffic is routed through this microservice.
+// @host            api.postly-mes.ru:8081
+// @BasePath        /
 func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("cannot load .env")

@@ -1,0 +1,1309 @@
+basePath: /
+definitions:
+  gateway-service_internal_router_initrouter.Chats:
+    properties:
+      avatar_url:
+        type: string
+      id:
+        type: string
+      last_message:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: integer
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  gateway-service_internal_router_initrouter.Groups:
+    properties:
+      id:
+        type: string
+      last_message:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: integer
+      username:
+        type: string
+    type: object
+  swagger.AuthErrorResponse:
+    properties:
+      message:
+        example: Неверный логин или пароль
+        type: string
+    type: object
+  swagger.AvatarItem:
+    properties:
+      created_at:
+        example: 1700000000000
+        type: integer
+      s3_key:
+        example: avatars/usr_12345/avatar.png
+        type: string
+      url:
+        example: /avatar?key=avatars%2Fusr_12345%2Favatar.png
+        type: string
+    type: object
+  swagger.ClearChatRequest:
+    properties:
+      chat_id:
+        example: jnak323aAWEFc...
+        type: string
+    type: object
+  swagger.CreateChatRequest:
+    properties:
+      target_username:
+        example: alex
+        type: string
+      username:
+        example: ivan
+        type: string
+    type: object
+  swagger.CreateChatResponse:
+    properties:
+      chat_id:
+        example: jnak323aAWEFc...
+        type: string
+      target_id:
+        example: 32jfaASFjkndvs...
+        type: string
+    type: object
+  swagger.CreateGroupRequest:
+    properties:
+      avatar_color:
+        example: '#4A90E2'
+        type: string
+      avatar_file:
+        example: avatar_group_12.png
+        type: string
+      is_private:
+        example: true
+        type: boolean
+      members:
+        example:
+        - '["alex"'
+        - '"dmitry"'
+        - '"elena"]'
+        items:
+          type: string
+        type: array
+      name:
+        example: Разработка Postly
+        type: string
+    type: object
+  swagger.CreateGroupResponse:
+    properties:
+      group_id:
+        example: ASD32e421xzc...
+        type: string
+      id:
+        example: ASD32e421xzc...
+        type: string
+      not_found:
+        example:
+        - '["unknown_user"]'
+        items:
+          type: string
+        type: array
+    type: object
+  swagger.DeleteAvatarRequest:
+    properties:
+      s3_key:
+        example: avatars/usr_12345/avatar.png
+        type: string
+    type: object
+  swagger.DeleteChatRequest:
+    properties:
+      chat_id:
+        example: jnak323aAWEFc...
+        type: string
+    type: object
+  swagger.DeleteFriendRequest:
+    properties:
+      friend_id:
+        example: ey313afawrfq3..
+        type: string
+    type: object
+  swagger.DeleteGroupRequest:
+    properties:
+      chat_id:
+        example: ASD32e421xzc
+        type: string
+    type: object
+  swagger.FCMRegisterRequest:
+    properties:
+      fcm_token:
+        example: dGhpcy1pcy1hLWZha2UtZmNtLXRva2Vu...
+        type: string
+    type: object
+  swagger.FriendActionRequest:
+    properties:
+      request_id:
+        example: ey124asfaaew32...
+        type: string
+    type: object
+  swagger.FriendItem:
+    properties:
+      avatar_url:
+        example: /avatar?user_id=ey313afawrfq3..
+        type: string
+      id:
+        example: ey313afawrfq3..
+        type: string
+      username:
+        example: alex
+        type: string
+    type: object
+  swagger.FriendRequestItem:
+    properties:
+      avatar_url:
+        example: /avatar?user_id=ey313afawrfq3..
+        type: string
+      created_at:
+        example: 1700000000000
+        type: integer
+      request_id:
+        example: ey124asfaaew32...
+        type: string
+      sender_id:
+        example: ey313afawrfq3..
+        type: string
+      username:
+        example: alex
+        type: string
+    type: object
+  swagger.GetAvatarUploadURLRequest:
+    properties:
+      content_type:
+        enum:
+        - image/jpeg
+        - image/png
+        - image/webp
+        example: image/png
+        type: string
+      file_name:
+        example: avatar.png
+        type: string
+    type: object
+  swagger.GetAvatarUploadURLResponse:
+    properties:
+      s3_key:
+        example: avatars/usr_12345/avatar.png
+        type: string
+      upload_url:
+        example: https://s3.storage.local/upload/...
+        type: string
+    type: object
+  swagger.LoginRequest:
+    properties:
+      password:
+        example: secret123
+        type: string
+      username:
+        example: ivan
+        type: string
+    type: object
+  swagger.LoginResponse:
+    properties:
+      id:
+        example: usr_12345
+        type: string
+      token:
+        example: eyJhbGciOi...
+        type: string
+      username:
+        example: ivan
+        type: string
+    type: object
+  swagger.OKResponse:
+    properties:
+      ok:
+        example: true
+        type: boolean
+    type: object
+  swagger.RegisterRequest:
+    properties:
+      email:
+        example: ivan@example.com
+        type: string
+      password:
+        example: secret123
+        type: string
+      phone:
+        example: "+79991234567"
+        type: string
+      username:
+        example: ivan
+        type: string
+    type: object
+  swagger.SendFriendRequestReq:
+    properties:
+      target_username:
+        example: alex
+        type: string
+      username:
+        example: alex
+        type: string
+    type: object
+  swagger.SendFriendRequestResponse:
+    properties:
+      request_id:
+        example: ey124asfaaew32...
+        type: string
+    type: object
+  swagger.SentRequestItem:
+    properties:
+      avatar_url:
+        example: /avatar?user_id=ey2131asafd2...
+        type: string
+      created_at:
+        example: 1700000000000
+        type: integer
+      receiver_id:
+        example: ey2131asafd2...
+        type: string
+      request_id:
+        example: ey124asfaaew32...
+        type: string
+      username:
+        example: dmitry
+        type: string
+    type: object
+  swagger.SetAvatarRequest:
+    properties:
+      s3_key:
+        example: avatars/usr_12345/avatar.png
+        type: string
+    type: object
+  swagger.StatusResponse:
+    properties:
+      status:
+        example: true
+        type: boolean
+    type: object
+  swagger.SuccessResponse:
+    properties:
+      success:
+        example: ok
+        type: string
+    type: object
+  swagger.VerifyResponse:
+    properties:
+      user_id:
+        example: usr_12345
+        type: string
+    type: object
+  swagger.VersionResponse:
+    properties:
+      success:
+        example: true
+        type: boolean
+      version:
+        example: 1.4.2
+        type: string
+    type: object
+host: api.postly-mes.ru:8081
+info:
+  contact: {}
+  description: API Gateway for all services. All incoming traffic is routed through
+    this microservice.
+  title: Gateway Service API
+  version: "1.0"
+paths:
+  /acceptFriendRequest:
+    post:
+      consumes:
+      - application/json
+      description: Accepts an incoming friend request by request ID
+      parameters:
+      - description: Request ID
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.FriendActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Status: true'
+          schema:
+            $ref: '#/definitions/swagger.StatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Request not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Accept friend request
+      tags:
+      - friends
+  /avatar:
+    get:
+      description: Streams the binary image of an avatar from S3 by key or user_id
+      parameters:
+      - description: Avatar S3 key
+        example: '"avatars/usr_12345/avatar.png"'
+        in: query
+        name: key
+        type: string
+      - description: Target user ID
+        example: '"usr_12345"'
+        in: query
+        name: user_id
+        type: string
+      produces:
+      - image/*
+      - application/octet-stream
+      responses:
+        "200":
+          description: Avatar binary stream
+          schema:
+            type: file
+        "400":
+          description: key or user_id required
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not found
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Internal error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get avatar image
+      tags:
+      - user
+  /cancelFriendRequest:
+    post:
+      consumes:
+      - application/json
+      description: Cancels a pending outgoing friend request sent by the authorized
+        user
+      parameters:
+      - description: Request ID
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.FriendActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'OK: true'
+          schema:
+            $ref: '#/definitions/swagger.OKResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Request not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Cancel outgoing friend request
+      tags:
+      - friends
+  /clearChat:
+    post:
+      consumes:
+      - application/json
+      description: Clears message history for a specific chat by ID
+      parameters:
+      - description: chat_id in the body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.ClearChatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Status: true'
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "403":
+          description: Error clearing chat (forbidden)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Clearing the chat
+      tags:
+      - chat
+  /createChat:
+    post:
+      consumes:
+      - application/json
+      description: Create a new chat if it doesn't exist; otherwise, get its ID
+      parameters:
+      - description: username and target_username in the body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.CreateChatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New chat
+          schema:
+            $ref: '#/definitions/swagger.CreateChatResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: User was not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Error creating chat
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Creating chat
+      tags:
+      - chat
+  /createGroup:
+    post:
+      consumes:
+      - application/json
+      description: Create a new group if it doesn't exist; otherwise, get its ID
+      parameters:
+      - description: name, members, avatar in the body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.CreateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New group details
+          schema:
+            $ref: '#/definitions/swagger.CreateGroupResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Error creating group
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Creating group
+      tags:
+      - chat
+  /declineFriendRequest:
+    post:
+      consumes:
+      - application/json
+      description: Declines an incoming friend request by request ID
+      parameters:
+      - description: Request ID
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.FriendActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Status: true'
+          schema:
+            $ref: '#/definitions/swagger.StatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Request not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Decline friend request
+      tags:
+      - friends
+  /deleteAvatar:
+    post:
+      consumes:
+      - application/json
+      description: Removes an avatar from the user profile and deletes the file from
+        S3 storage
+      parameters:
+      - description: S3 key of the avatar to delete
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.DeleteAvatarRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Avatar deleted successfully
+          schema:
+            $ref: '#/definitions/swagger.StatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Avatar not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Failed to delete avatar
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete avatar
+      tags:
+      - user
+  /deleteChat:
+    post:
+      consumes:
+      - application/json
+      description: Completely deletes a private chat by chat_id
+      parameters:
+      - description: chat_id in the body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.DeleteChatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Status: true'
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "403":
+          description: Error deleting chat
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Deleting chat
+      tags:
+      - chat
+  /deleteFriend:
+    post:
+      consumes:
+      - application/json
+      description: Removes a user from friends by user ID or username
+      parameters:
+      - description: Friend ID or username
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.DeleteFriendRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Friend deleted successfully
+          schema:
+            $ref: '#/definitions/swagger.SuccessResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "409":
+          description: Friend deletion conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete friend
+      tags:
+      - friends
+  /deleteGroup:
+    post:
+      consumes:
+      - application/json
+      description: Completely deletes a group chat by chat_id
+      parameters:
+      - description: chat_id in the body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.DeleteGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Status: true'
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "403":
+          description: Error deleting group
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Deleting group
+      tags:
+      - chat
+  /file:
+    get:
+      description: Verifies user membership in the chat containing the target message
+        and proxies the file from S3. Supports HTTP Range requests for media streaming
+        and client caching.
+      parameters:
+      - description: Message ID associated with the attachment
+        example: '"alksjNSA212fc"'
+        in: query
+        name: message_id
+        required: true
+        type: string
+      - description: HTTP Range header for chunked streaming (e.g., bytes=0-1024)
+        in: header
+        name: Range
+        type: string
+      produces:
+      - application/octet-stream
+      - image/*
+      - video/*
+      responses:
+        "200":
+          description: Full binary file stream
+          schema:
+            type: file
+        "206":
+          description: Partial content (media streaming chunks)
+          schema:
+            type: file
+        "400":
+          description: message_id required
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not found
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Internal error
+          schema:
+            type: string
+        "502":
+          description: Bad gateway
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Download or stream a file
+      tags:
+      - files
+  /getAvatarUploadUrl:
+    post:
+      consumes:
+      - application/json
+      description: Generates a pre-signed S3 URL for uploading an avatar image (JPEG,
+        PNG, WebP)
+      parameters:
+      - description: File name and MIME type
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.GetAvatarUploadURLRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Pre-signed upload URL and S3 key
+          schema:
+            $ref: '#/definitions/swagger.GetAvatarUploadURLResponse'
+        "400":
+          description: Only JPEG, PNG and WebP are supported
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Failed to get upload URL
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get avatar upload URL
+      tags:
+      - user
+  /getAvatars:
+    get:
+      description: Returns a list of all avatars uploaded by a user. Defaults to the
+        authorized user if user_id query parameter is not provided.
+      parameters:
+      - description: Optional target user ID
+        example: '"usr_12345"'
+        in: query
+        name: user_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of avatars
+          schema:
+            items:
+              $ref: '#/definitions/swagger.AvatarItem'
+            type: array
+        "401":
+          description: Unauthorized
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Failed to get avatars
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get avatar history
+      tags:
+      - user
+  /getChats:
+    get:
+      description: Returning the list of chats by JWT Token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The list of chats
+          schema:
+            items:
+              $ref: '#/definitions/gateway-service_internal_router_initrouter.Chats'
+            type: array
+        "401":
+          description: Unauthorized
+        "500":
+          description: Error getting chats
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Getting chats
+      tags:
+      - chat
+  /getFriendRequests:
+    get:
+      description: Returns a list of all incoming friend requests for the authorized
+        user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of received friend requests
+          schema:
+            items:
+              $ref: '#/definitions/swagger.FriendRequestItem'
+            type: array
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get received friend requests
+      tags:
+      - friends
+  /getFriends:
+    get:
+      description: Returns a list of all confirmed friends for the authorized user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of friends
+          schema:
+            items:
+              $ref: '#/definitions/swagger.FriendItem'
+            type: array
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get friends list
+      tags:
+      - friends
+  /getGroups:
+    get:
+      description: Getting user groups by JWT Token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The list of groups
+          schema:
+            items:
+              $ref: '#/definitions/gateway-service_internal_router_initrouter.Groups'
+            type: array
+        "401":
+          description: Unauthorized
+        "500":
+          description: Error getting groups
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Getting groups
+      tags:
+      - chat
+  /getSentRequests:
+    get:
+      description: Returns a list of all pending outgoing friend requests sent by
+        the authorized user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of sent friend requests
+          schema:
+            items:
+              $ref: '#/definitions/swagger.SentRequestItem'
+            type: array
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get sent friend requests
+      tags:
+      - friends
+  /getVersion:
+    get:
+      description: Returns current gateway service version for client-side compatibility
+        checks
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Current version information
+          schema:
+            $ref: '#/definitions/swagger.VersionResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: Get current version
+      tags:
+      - version
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Accepts username and password, validates credentials, and returns
+        user ID, JWT token, and username
+      parameters:
+      - description: User credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully authenticated
+          schema:
+            $ref: '#/definitions/swagger.LoginResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Invalid username or password
+          schema:
+            $ref: '#/definitions/swagger.AuthErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: User login
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Registers a new user and sets initial authentication credentials.
+        Rate limited by IP/username.
+      parameters:
+      - description: Registration details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Registered successfully
+          schema:
+            $ref: '#/definitions/swagger.StatusResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "409":
+          description: Username or email already exists
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Registration failed. Try again.
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: User registration
+      tags:
+      - user
+  /registerFCMToken:
+    post:
+      consumes:
+      - application/json
+      description: Saves or updates the Firebase Cloud Messaging device token in Redis
+        cache for push notifications
+      parameters:
+      - description: FCM device token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.FCMRegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token registered successfully
+          schema:
+            $ref: '#/definitions/swagger.OKResponse'
+        "400":
+          description: Bad request (empty token or invalid JSON)
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Register FCM token
+      tags:
+      - fcm
+  /sendFriendRequest:
+    post:
+      consumes:
+      - application/json
+      description: Sends a friendship invitation to target user by username
+      parameters:
+      - description: Recipient username
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.SendFriendRequestReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Request sent successfully
+          schema:
+            $ref: '#/definitions/swagger.SendFriendRequestResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "409":
+          description: Friend request conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Send friend request
+      tags:
+      - friends
+  /setAvatar:
+    post:
+      consumes:
+      - application/json
+      description: Assigns an uploaded S3 avatar key as the active profile avatar
+      parameters:
+      - description: S3 key of the uploaded avatar
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/swagger.SetAvatarRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Avatar updated successfully
+          schema:
+            $ref: '#/definitions/swagger.StatusResponse'
+        "400":
+          description: Invalid file key
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden file key
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "409":
+          description: This avatar is already set
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to set avatar
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Set active avatar
+      tags:
+      - user
+  /verify:
+    get:
+      description: Extracts Bearer token from the Authorization header, validates
+        it, and returns the user ID
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token is valid, returns user ID
+          schema:
+            $ref: '#/definitions/swagger.VerifyResponse'
+        "401":
+          description: Unauthorized (token missing or invalid)
+      security:
+      - BearerAuth: []
+      summary: Validate JWT token
+      tags:
+      - auth
+  /ws:
+    get:
+      description: Establishes a bidirectional WebSocket connection for real-time
+        messaging, typing indicators, and call signaling. Requires a valid JWT token
+        passed via the token query parameter.
+      parameters:
+      - description: JWT auth token (e.g. Bearer eyJhbGci... or raw JWT)
+        example: '"eyJhbGciOi..."'
+        in: query
+        name: token
+        required: true
+        type: string
+      responses:
+        "101":
+          description: 'Switching Protocols: successfully upgraded to WebSocket connection'
+        "401":
+          description: 'Unauthorized: token is missing, invalid or expired'
+          schema:
+            type: string
+      summary: WebSocket connection upgrade
+      tags:
+      - websocket
+swagger: "2.0"
