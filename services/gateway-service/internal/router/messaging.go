@@ -18,10 +18,10 @@ import (
 )
 
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
-	mux.Handle("/getMessages",     middlewares.Chain(HandleGetMessages(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/sendMessage",     middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/deleteMessage",  middlewares.Chain(handleDeleteMessage(c, cache), middlewares.JWTMiddleware(c)))
-	mux.Handle("/getUploadUrl",    middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getMessages", middlewares.Chain(HandleGetMessages(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/sendMessage", middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteMessage", middlewares.Chain(handleDeleteMessage(c, cache), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getUploadUrl", middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/getMoreMessages", middlewares.Chain(handleGetMoreMessages(c), middlewares.JWTMiddleware(c)))
 }
 
@@ -61,6 +61,7 @@ func ownFileKey(key, userID string) bool {
 }
 
 // handleGetUploadURL godoc
+//
 //	@Summary		Get upload URL for message attachment
 //	@Description	Generates a pre-signed S3 URL to upload media or file attachments directly from the client
 //	@Tags			messaging
@@ -117,6 +118,7 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 }
 
 // HandleGetMessages godoc
+//
 //	@Summary		Get recent messages
 //	@Description	Returns the initial page of messages for a chat. Messages are returned in reverse chronological order (newest first). Chat ID can be provided via query param or JSON body.
 //	@Tags			messaging
@@ -204,6 +206,7 @@ func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 }
 
 // handleSendMessage godoc
+//
 //	@Summary		Send message
 //	@Description	Sends a new text message to the specified chat
 //	@Tags			messaging
@@ -252,6 +255,7 @@ func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 }
 
 // handleDeleteMessage godoc
+//
 //	@Summary		Delete message
 //	@Description	Deletes a message created by the authorized user
 //	@Tags			messaging
@@ -266,54 +270,55 @@ func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 //	@Failure		405		{string}	string							"Method not allowed"
 //	@Router			/deleteMessage [post]
 func handleDeleteMessage(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        if r.Method != http.MethodPost {
-            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-            return
-        }
-        userID := r.Context().Value(middlewares.UserIDKey).(string)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
-        var data struct {
-            MessageID string `json:"message_id"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-            http.Error(w, "Bad request", http.StatusBadRequest)
-            return
-        }
+		var data struct {
+			MessageID string `json:"message_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
 
-        resp, err := c.Messaging.DeleteMessage(r.Context(), &msgpb.DeleteMessageRequest{
-            MessageId: data.MessageID,
-            SenderId:  userID,
-        })
-        if err != nil {
-            w.Header().Set("Content-Type", "application/json")
-            w.WriteHeader(http.StatusForbidden)
-            fmt.Printf("[ERROR] Delete Message error: %v (msg=%s, user=%s)", err, data.MessageID, userID)
-            json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
-            return
-        }
+		resp, err := c.Messaging.DeleteMessage(r.Context(), &msgpb.DeleteMessageRequest{
+			MessageId: data.MessageID,
+			SenderId:  userID,
+		})
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Printf("[ERROR] Delete Message error: %v (msg=%s, user=%s)", err, data.MessageID, userID)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
+			return
+		}
 
-        // Оповещаем участников через сокет
-        if resp.ChatId != "" {
-            pts, pErr := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: resp.ChatId})
-            if pErr == nil && pts != nil {
-                delPayload, _ := json.Marshal(map[string]string{
-                    "type":       "DELETE_MESSAGE",
-                    "chat_id":    resp.ChatId,
-                    "message_id": data.MessageID,
-                })
-                for _, uid := range pts.UserIds {
-                    cache.Publish(r.Context(), "ws:user:"+uid, delPayload)
-                }
-            }
-        }
+		// Оповещаем участников через сокет
+		if resp.ChatId != "" {
+			pts, pErr := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: resp.ChatId})
+			if pErr == nil && pts != nil {
+				delPayload, _ := json.Marshal(map[string]string{
+					"type":       "DELETE_MESSAGE",
+					"chat_id":    resp.ChatId,
+					"message_id": data.MessageID,
+				})
+				for _, uid := range pts.UserIds {
+					cache.Publish(r.Context(), "ws:user:"+uid, delPayload)
+				}
+			}
+		}
 
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(map[string]string{"chat_id": resp.ChatId})
-    }
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"chat_id": resp.ChatId})
+	}
 }
 
 // handleGetMoreMessages godoc
+//
 //	@Summary		Get older messages (cursor pagination)
 //	@Description	Fetches the next chunk of older chat messages before a given message cursor. Messages are returned in reverse chronological order (newest first).
 //	@Tags			messaging

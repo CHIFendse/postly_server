@@ -187,72 +187,63 @@ func (s *Messaging) GetFileInfo(ctx context.Context, req *msgpb.GetFileInfoReque
 }
 
 func (s *Messaging) DeleteMessage(ctx context.Context, req *msgpb.DeleteMessageRequest) (*msgpb.DeleteMessageResponse, error) {
-	var chatID string
-	var fileURL string
-	var msgType string
+    var chatID string
 
-	err := s.db.QueryRowContext(ctx,
-		`DELETE FROM messages
-		 WHERE id=$1 AND sender_id=$2
-		 RETURNING chat_id, file_url, type`,
-		req.MessageId,
-		req.SenderId,
-	).Scan(&chatID, &fileURL, &msgType)
+    // 1. Получаем chat_id удаляемого сообщения
+    err := s.db.QueryRowContext(ctx, 
+        `SELECT chat_id FROM messages WHERE id = $1 AND sender_id = $2`, 
+        req.MessageId, req.SenderId,
+    ).Scan(&chatID)
+    if err == sql.ErrNoRows {
+        return nil, status.Error(codes.NotFound, "сообщение не найдено или нет прав")
+    }
+    if err != nil {
+        return nil, status.Error(codes.Internal, err.Error())
+    }
 
-	if err != nil {
-		return nil, status.Error(codes.NotFound, "сообщение не найдено или нет прав")
-	}
+    // 2. Удаляем сообщение
+    _, err = s.db.ExecContext(ctx, `DELETE FROM messages WHERE id = $1`, req.MessageId)
+    if err != nil {
+        return nil, status.Error(codes.Internal, err.Error())
+    }
 
-	if fileURL != "" && msgType != "text" {
-		_, err := s.s3Client.DeleteFile(ctx, &s3pb.DeleteFileRequest{
-			S3Key: fileURL,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
+    s.cache.Del(ctx, msgCachePrefix+chatID)
 
-	s.cache.Del(ctx, msgCachePrefix+chatID)
+    // 3. Ищем предыдущее актуальное сообщение в этом чате
+    var prevText, prevSenderID, prevType string
+    err = s.db.QueryRowContext(ctx, `
+        SELECT text, sender_id, type 
+        FROM messages 
+        WHERE chat_id = $1 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    `, chatID).Scan(&prevText, &prevSenderID, &prevType)
 
-	var lastText, lastSender, lastType string
+    if err == sql.ErrNoRows {
+        // Чат пуст
+        prevText = ""
+        prevSenderID = ""
+    } else if err == nil {
+        switch prevType {
+        case "image":
+            prevText = "Фотография"
+        case "file":
+            prevText = "Файл"
+        case "voice":
+            prevText = "Голосовое сообщение"
+        case "video":
+            prevText = "Видео"
+        }
+    }
 
-	err = s.db.QueryRowContext(ctx,
-		`SELECT text, sender_id, type
-		 FROM messages
-		 WHERE chat_id=$1
-		 ORDER
-		 BY created_at DESC
-		 LIMIT 1`,
-		chatID,
-	).Scan(&lastText, &lastSender, &lastType)
+    // 4. Синхронизируем chat-service с реальным последним сообщением
+    _, _ = s.chatSvc.UpdateLastMessage(ctx, &chatpb.UpdateLastMessageRequest{
+        ChatId:   chatID,
+        Text:     prevText,
+        SenderId: prevSenderID,
+    })
 
-	if err == sql.ErrNoRows {
-		lastText = ""
-		lastSender = ""
-	} else if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	switch lastType {
-	case "image":
-		lastText = "Фотография..."
-	case "video":
-		lastText = "Видео..."
-	case "file":
-		lastText = "Файл..."
-	case "voice":
-		lastText = "Голосовое сообщение..."
-	}
-
-	_, _ = s.chatSvc.UpdateLastMessage(ctx, &chatpb.UpdateLastMessageRequest{
-		ChatId:   chatID,
-		Text:     lastText,
-		SenderId: lastSender,
-	})
-
-	go s.notifyDeleteMessage(chatID, req.MessageId, lastText, lastSender)
-
-	return &msgpb.DeleteMessageResponse{ChatId: chatID}, nil
+    return &msgpb.DeleteMessageResponse{ChatId: chatID}, nil
 }
 
 func (s *Messaging) DeleteChatMessages(ctx context.Context, req *msgpb.DeleteChatMsgsRequest) (*msgpb.DeleteChatMsgsResponse, error) {
