@@ -286,6 +286,8 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			fmt.Printf("[ERROR] Delete Message error: %v\n", err.Error())
+			log.Printf("[DeleteMessage] Attempting delete: message_id=%q, sender_id=%q", data.MessageID, userID)
+			fmt.Printf("[DeleteMessage] Attempting delete: message_id=%q, sender_id=%q", data.MessageID, userID)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
 			return
 		}
