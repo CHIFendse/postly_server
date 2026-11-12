@@ -14,10 +14,10 @@ import (
 )
 
 func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
-	mux.Handle("/getMessages", 	 middlewares.Chain(HandleGetMessages(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/sendMessage", 	 middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/deleteMessage", middlewares.Chain(handleDeleteMessage(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/getUploadUrl",  middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getMessages",     middlewares.Chain(HandleGetMessages(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/sendMessage",     middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteMessage",  middlewares.Chain(handleDeleteMessage(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/getUploadUrl",    middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/getMoreMessages", middlewares.Chain(handleGetMoreMessages(c), middlewares.JWTMiddleware(c)))
 }
 
@@ -56,6 +56,20 @@ func ownFileKey(key, userID string) bool {
 	return false
 }
 
+// handleGetUploadURL godoc
+//	@Summary		Get upload URL for message attachment
+//	@Description	Generates a pre-signed S3 URL to upload media or file attachments directly from the client
+//	@Tags			messaging
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.GetUploadURLRequest		true	"Attachment metadata"
+//	@Success		200		{object}	swagger.GetUploadURLResponse	"Pre-signed upload URL and S3 key"
+//	@Failure		400		{string}	string							"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		405		{string}	string							"Method not allowed"
+//	@Failure		500		{object}	map[string]string				"Failed to get upload URL"
+//	@Router			/getUploadUrl [post]
 func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -65,12 +79,10 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 		var data struct {
-			FileName    string `json:"file_name"`
-			ContentType string `json:"content_type"`
-
-			FileSize json.RawMessage `json:"file_size"`
-
-			MessageType string `json:"message_type"`
+			FileName    string          `json:"file_name"`
+			ContentType string          `json:"content_type"`
+			FileSize    json.RawMessage `json:"file_size"`
+			MessageType string          `json:"message_type"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			log.Printf("[GW] getUploadUrl bad body from %s: %v", userID, err)
@@ -86,8 +98,9 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 		})
 		if err != nil {
 			log.Printf("[GW] GetUploadUrl: %v", err)
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения ссылки для загрузки"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to get upload URL"})
 			return
 		}
 
@@ -99,9 +112,20 @@ func handleGetUploadURL(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// HandleGetMessages godoc
+//	@Summary		Get recent messages
+//	@Description	Returns the initial page of messages for a chat. Messages are returned in reverse chronological order (newest first). Chat ID can be provided via query param or JSON body.
+//	@Tags			messaging
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			chat_id	query		string					false	"Chat ID"	example("cht_102938")
+//	@Success		200		{array}		swagger.MessageItem		"List of messages in reverse chronological order (newest first)"
+//	@Failure		400		{string}	string					"chat_id required"
+//	@Failure		401		"Unauthorized"
+//	@Failure		500		{object}	map[string]string		"Failed to fetch messages"
+//	@Router			/getMessages [get]
 func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		chatID := r.URL.Query().Get("chat_id")
 		if chatID == "" {
 			var body struct {
@@ -116,8 +140,9 @@ func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 		}
 		resp, err := c.Messaging.GetMessages(r.Context(), &msgpb.GetMessagesRequest{ChatId: chatID})
 		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения сообщений"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to fetch messages"})
 			return
 		}
 
@@ -174,6 +199,20 @@ func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// handleSendMessage godoc
+//	@Summary		Send message
+//	@Description	Sends a new text message to the specified chat
+//	@Tags			messaging
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.SendMessageRequest	true	"Chat ID and message text"
+//	@Success		200		{object}	swagger.SendMessageResponse	"Message sent successfully"
+//	@Failure		400		{string}	string						"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		405		{string}	string						"Method not allowed"
+//	@Failure		500		{object}	map[string]string			"Failed to send message"
+//	@Router			/sendMessage [post]
 func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -197,8 +236,9 @@ func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 			Text:     data.Text,
 		})
 		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка отправки сообщения"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to send message"})
 			return
 		}
 
@@ -207,6 +247,20 @@ func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
+// handleDeleteMessage godoc
+//	@Summary		Delete message
+//	@Description	Deletes a message created by the authorized user
+//	@Tags			messaging
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.DeleteMessageRequest	true	"Message ID"
+//	@Success		200		{object}	swagger.DeleteMessageResponse	"Message deleted successfully"
+//	@Failure		400		{string}	string							"Bad request"
+//	@Failure		401		"Unauthorized"
+//	@Failure		403		{object}	map[string]string				"Forbidden (cannot delete other users' messages)"
+//	@Failure		405		{string}	string							"Method not allowed"
+//	@Router			/deleteMessage [post]
 func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -228,8 +282,9 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 			SenderId:  userID,
 		})
 		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка удаления сообщения"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
 			return
 		}
 
@@ -238,17 +293,28 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 	}
 }
 
-
-
+// handleGetMoreMessages godoc
+//	@Summary		Get older messages (cursor pagination)
+//	@Description	Fetches the next chunk of older chat messages before a given message cursor. Messages are returned in reverse chronological order (newest first).
+//	@Tags			messaging
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		swagger.GetMoreMessagesRequest	true	"Cursor pagination parameters"
+//	@Success		200		{array}		swagger.MessageItem				"List of older messages in reverse chronological order"
+//	@Failure		400		{string}	string							"Invalid JSON or chat_id required"
+//	@Failure		401		"Unauthorized"
+//	@Failure		500		{object}	map[string]string				"Failed to fetch messages"
+//	@Router			/getMoreMessages [post]
 func handleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			ChatID string `json:"chat_id"`
-			LastMessageId string `json:"last_message_id"`
-			LastMessageCreatedAt int64 `json:"last_message_created_at"`
+			ChatID               string `json:"chat_id"`
+			LastMessageId        string `json:"last_message_id"`
+			LastMessageCreatedAt int64  `json:"last_message_created_at"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "некорректный json", http.StatusBadRequest)
+			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
 		chatID := body.ChatID
@@ -261,14 +327,14 @@ func handleGetMoreMessages(c *clients.Clients) http.HandlerFunc {
 		}
 
 		resp, err := c.Messaging.GetMoreMessages(r.Context(), &msgpb.GetMoreMessagesRequest{
-			ChatId: chatID, 
+			ChatId:               chatID,
 			LastMessageId:        body.LastMessageId,
 			LastMessageCreatedAt: body.LastMessageCreatedAt,
 		})
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ошибка получения сообщений"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to fetch messages"})
 			return
 		}
 
