@@ -302,11 +302,11 @@ func (c *Chat) GetParticipants(ctx context.Context, req *chatpb.GetParticipantsR
 
 func (c *Chat) UpdateLastMessage(ctx context.Context, req *chatpb.UpdateLastMessageRequest) (*chatpb.UpdateLastMessageResponse, error) {
 	c.db.ExecContext(ctx,
-		`UPDATE chats SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
+		`UPDATE chats SET last_message=$1, last_msg_sender=NULLIF($2, '')::uuid, updated_at=NOW() WHERE id=$3`,
 		req.Text, req.SenderId, req.ChatId,
 	)
 	c.db.ExecContext(ctx,
-		`UPDATE groups SET last_message=$1, last_msg_sender=$2::uuid, updated_at=NOW() WHERE id=$3`,
+		`UPDATE groups SET last_message=$1, last_msg_sender=NULLIF($2, '')::uuid, updated_at=NOW() WHERE id=$3`,
 		req.Text, req.SenderId, req.ChatId,
 	)
 
