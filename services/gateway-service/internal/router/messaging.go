@@ -2,6 +2,7 @@ package router
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -284,6 +285,7 @@ func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
+			fmt.Printf("[ERROR] Delete Message error: %v\n", err.Error())
 			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
 			return
 		}
