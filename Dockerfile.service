@@ -6,8 +6,9 @@ ARG SERVICE
 RUN apk add --no-cache build-base
 WORKDIR /app
 
-# Shared proto (all services: replace postly/proto => ../../pkg/proto)
-COPY pkg/ pkg/ 
+# Shared proto and shared docs
+COPY pkg/ pkg/
+COPY docs/ docs/
 
 # Service source
 COPY services/${SERVICE}/ services/${SERVICE}/
