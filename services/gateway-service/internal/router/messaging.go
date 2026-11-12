@@ -9,15 +9,18 @@ import (
 
 	"gateway-service/internal/clients"
 	"gateway-service/internal/router/middlewares"
+	chatpb "postly/proto/chat"
 	msgpb "postly/proto/messaging"
 	s3pb "postly/proto/s3"
 	userpb "postly/proto/user"
+
+	"github.com/redis/go-redis/v9"
 )
 
-func RegisterMessaging(mux *http.ServeMux, c *clients.Clients) {
+func RegisterMessaging(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 	mux.Handle("/getMessages",     middlewares.Chain(HandleGetMessages(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/sendMessage",     middlewares.Chain(handleSendMessage(c), middlewares.JWTMiddleware(c)))
-	mux.Handle("/deleteMessage",  middlewares.Chain(handleDeleteMessage(c), middlewares.JWTMiddleware(c)))
+	mux.Handle("/deleteMessage",  middlewares.Chain(handleDeleteMessage(c, cache), middlewares.JWTMiddleware(c)))
 	mux.Handle("/getUploadUrl",    middlewares.Chain(handleGetUploadURL(c), middlewares.JWTMiddleware(c)))
 	mux.Handle("/getMoreMessages", middlewares.Chain(handleGetMoreMessages(c), middlewares.JWTMiddleware(c)))
 }
@@ -262,39 +265,52 @@ func handleSendMessage(c *clients.Clients) http.HandlerFunc {
 //	@Failure		403		{object}	map[string]string				"Forbidden (cannot delete other users' messages)"
 //	@Failure		405		{string}	string							"Method not allowed"
 //	@Router			/deleteMessage [post]
-func handleDeleteMessage(c *clients.Clients) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		userID := r.Context().Value(middlewares.UserIDKey).(string)
+func handleDeleteMessage(c *clients.Clients, cache *redis.Client) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+            return
+        }
+        userID := r.Context().Value(middlewares.UserIDKey).(string)
 
-		var data struct {
-			MessageID string `json:"message_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
+        var data struct {
+            MessageID string `json:"message_id"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+            http.Error(w, "Bad request", http.StatusBadRequest)
+            return
+        }
 
-		resp, err := c.Messaging.DeleteMessage(r.Context(), &msgpb.DeleteMessageRequest{
-			MessageId: data.MessageID,
-			SenderId:  userID,
-		})
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			fmt.Printf("[ERROR] Delete Message error: %v\n", err.Error())
-			log.Printf("[DeleteMessage] Attempting delete: message_id=%q, sender_id=%q", data.MessageID, userID)
-			fmt.Printf("[DeleteMessage] Attempting delete: message_id=%q, sender_id=%q", data.MessageID, userID)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
-			return
-		}
+        resp, err := c.Messaging.DeleteMessage(r.Context(), &msgpb.DeleteMessageRequest{
+            MessageId: data.MessageID,
+            SenderId:  userID,
+        })
+        if err != nil {
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusForbidden)
+            fmt.Printf("[ERROR] Delete Message error: %v (msg=%s, user=%s)", err, data.MessageID, userID)
+            json.NewEncoder(w).Encode(map[string]string{"message": "Failed to delete message"})
+            return
+        }
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"chat_id": resp.ChatId})
-	}
+        // Оповещаем участников через сокет
+        if resp.ChatId != "" {
+            pts, pErr := c.Chat.GetParticipants(r.Context(), &chatpb.GetParticipantsRequest{ChatId: resp.ChatId})
+            if pErr == nil && pts != nil {
+                delPayload, _ := json.Marshal(map[string]string{
+                    "type":       "DELETE_MESSAGE",
+                    "chat_id":    resp.ChatId,
+                    "message_id": data.MessageID,
+                })
+                for _, uid := range pts.UserIds {
+                    cache.Publish(r.Context(), "ws:user:"+uid, delPayload)
+                }
+            }
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{"chat_id": resp.ChatId})
+    }
 }
 
 // handleGetMoreMessages godoc
