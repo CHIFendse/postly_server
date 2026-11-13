@@ -20,6 +20,17 @@ func RegisterInitClient(mux *http.ServeMux, c *clients.Clients) {
 	mux.Handle("/init_client", middlewares.Chain(handlerInit(c), middlewares.JWTMiddleware(c)))
 }
 
+// RegisterInitClient godoc
+// @Summary      Initialize client data
+// @Description  Retrieves an aggregated overview of the user's active chats, groups, friends, and incoming & outgoing friend requests.
+// @Tags         init
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} initResponse "Successfully retrieved client initialization data"
+// @Failure      401 {string} string "Unauthorized"
+// @Failure      500 {string} string "Internal server error while retrieving data or encoding JSON"
+// @Router       /init_client [get]
 func handlerInit(c *clients.Clients) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value(middlewares.UserIDKey).(string)

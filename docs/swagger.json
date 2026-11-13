@@ -738,6 +738,69 @@
                 }
             }
         },
+        "/deleteMessage": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a message created by the authorized user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "summary": "Delete message",
+                "parameters": [
+                    {
+                        "description": "Message ID",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/swagger.DeleteMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Message deleted successfully",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.DeleteMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden (cannot delete other users' messages)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method not allowed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/file": {
             "get": {
                 "security": [
@@ -951,12 +1014,12 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returning the list of chats by JWT Token",
+                "description": "Returning the list of chats by JWT Token. Implemented in the init_client endpoint.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "depricated"
                 ],
                 "summary": "Getting chats",
                 "responses": {
@@ -988,12 +1051,12 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a list of all incoming friend requests for the authorized user",
+                "description": "Returns a list of all incoming friend requests for the authorized user. Implemented in the init_client endpoint.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "friends"
+                    "depricated"
                 ],
                 "summary": "Get received friend requests",
                 "responses": {
@@ -1025,12 +1088,12 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a list of all confirmed friends for the authorized user",
+                "description": "Returns a list of all confirmed friends for the authorized user. Implemented in the init_client endpoint.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "friends"
+                    "depricated"
                 ],
                 "summary": "Get friends list",
                 "responses": {
@@ -1062,12 +1125,12 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Getting user groups by JWT Token",
+                "description": "Getting user groups by JWT Token. Implemented in the init_client endpoint.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "chat"
+                    "depricated"
                 ],
                 "summary": "Getting groups",
                 "responses": {
@@ -1092,6 +1155,121 @@
                 }
             }
         },
+        "/getMessages": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the initial page of messages for a chat. Messages are returned in reverse chronological order (newest first). Chat ID can be provided via query param or JSON body.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "summary": "Get recent messages",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "\"cht_102938\"",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of messages in reverse chronological order (newest first)",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/swagger.MessageItem"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "chat_id required",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Failed to fetch messages",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/getMoreMessages": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetches the next chunk of older chat messages before a given message cursor. Messages are returned in reverse chronological order (newest first).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "summary": "Get older messages (cursor pagination)",
+                "parameters": [
+                    {
+                        "description": "Cursor pagination parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/swagger.GetMoreMessagesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of older messages in reverse chronological order",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/swagger.MessageItem"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON or chat_id required",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Failed to fetch messages",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/getSentRequests": {
             "get": {
                 "security": [
@@ -1099,12 +1277,12 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a list of all pending outgoing friend requests sent by the authorized user",
+                "description": "Returns a list of all pending outgoing friend requests sent by the authorized user. Implemented in the init_client endpoint.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "friends"
+                    "depricated"
                 ],
                 "summary": "Get sent friend requests",
                 "responses": {
@@ -1129,6 +1307,69 @@
                 }
             }
         },
+        "/getUploadUrl": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generates a pre-signed S3 URL to upload media or file attachments directly from the client",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "messaging"
+                ],
+                "summary": "Get upload URL for message attachment",
+                "parameters": [
+                    {
+                        "description": "Attachment metadata",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/swagger.GetUploadURLRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pre-signed upload URL and S3 key",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.GetUploadURLResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "405": {
+                        "description": "Method not allowed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to get upload URL",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/getVersion": {
             "get": {
                 "description": "Returns current gateway service version for client-side compatibility checks",
@@ -1148,6 +1389,46 @@
                     },
                     "405": {
                         "description": "Method not allowed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/init_client": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves an aggregated overview of the user's active chats, groups, friends, and incoming \u0026 outgoing friend requests.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "init"
+                ],
+                "summary": "Initialize client data",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved client initialization data",
+                        "schema": {
+                            "$ref": "#/definitions/internal_router_initrouter.initResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error while retrieving data or encoding JSON",
                         "schema": {
                             "type": "string"
                         }
@@ -1397,6 +1678,69 @@
                 }
             }
         },
+        "/sendMessage": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sends a new text message to the specified chat. Implemented in the ws endpoint, use NEW_MESSAGE event.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "depricated"
+                ],
+                "summary": "Send message",
+                "parameters": [
+                    {
+                        "description": "Chat ID and message text",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/swagger.SendMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Message sent successfully",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.SendMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "405": {
+                        "description": "Method not allowed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to send message",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/setAvatar": {
             "post": {
                 "security": [
@@ -1587,6 +1931,124 @@
                 }
             }
         },
+        "internal_router_initrouter.Chats": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_message": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_router_initrouter.Groups": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "last_message": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_router_initrouter.friendOut": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_router_initrouter.initResponse": {
+            "type": "object",
+            "properties": {
+                "chats": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_router_initrouter.Chats"
+                    }
+                },
+                "friend_requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_router_initrouter.reqOut"
+                    }
+                },
+                "friends": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_router_initrouter.friendOut"
+                    }
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_router_initrouter.Groups"
+                    }
+                },
+                "sent_requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_router_initrouter.reqOut"
+                    }
+                }
+            }
+        },
+        "internal_router_initrouter.reqOut": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "receiver_id": {
+                    "type": "string"
+                },
+                "sender_id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "swagger.AuthErrorResponse": {
             "type": "object",
             "properties": {
@@ -1738,6 +2200,24 @@
                 }
             }
         },
+        "swagger.DeleteMessageRequest": {
+            "type": "object",
+            "properties": {
+                "message_id": {
+                    "type": "string",
+                    "example": "ey123asdfsfs..."
+                }
+            }
+        },
+        "swagger.DeleteMessageResponse": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string",
+                    "example": "eyew3rsdzdszs..."
+                }
+            }
+        },
         "swagger.FCMRegisterRequest": {
             "type": "object",
             "properties": {
@@ -1829,6 +2309,63 @@
                 }
             }
         },
+        "swagger.GetMoreMessagesRequest": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string",
+                    "example": "eyew3rsdzdszs..."
+                },
+                "last_message_created_at": {
+                    "type": "integer",
+                    "example": 1700000000
+                },
+                "last_message_id": {
+                    "type": "string",
+                    "example": "ey123asdfsfs..."
+                }
+            }
+        },
+        "swagger.GetUploadURLRequest": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string",
+                    "example": "image/png"
+                },
+                "file_name": {
+                    "type": "string",
+                    "example": "image.png"
+                },
+                "file_size": {
+                    "type": "integer",
+                    "example": 1048576
+                },
+                "message_type": {
+                    "type": "string",
+                    "enum": [
+                        "image",
+                        "video",
+                        "voice",
+                        "file"
+                    ],
+                    "example": "image"
+                }
+            }
+        },
+        "swagger.GetUploadURLResponse": {
+            "type": "object",
+            "properties": {
+                "s3_key": {
+                    "type": "string",
+                    "example": "images/ey313afawrfq3../image.png"
+                },
+                "upload_url": {
+                    "type": "string",
+                    "example": "https://s3.storage.local/upload/..."
+                }
+            }
+        },
         "swagger.LoginRequest": {
             "type": "object",
             "properties": {
@@ -1856,6 +2393,58 @@
                 "username": {
                     "type": "string",
                     "example": "ivan"
+                }
+            }
+        },
+        "swagger.MessageItem": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string",
+                    "example": "eyew3rsdzdszs..."
+                },
+                "created_at": {
+                    "type": "integer",
+                    "example": 1700000000000
+                },
+                "file_name": {
+                    "type": "string",
+                    "example": "document.pdf"
+                },
+                "file_size": {
+                    "type": "string",
+                    "example": "204800"
+                },
+                "file_url": {
+                    "type": "string",
+                    "example": "/file?message_id=ey123asdfsfs..."
+                },
+                "id": {
+                    "type": "string",
+                    "example": "ey123asdfsfs..."
+                },
+                "message_type": {
+                    "type": "string",
+                    "enum": [
+                        "text",
+                        "image",
+                        "video",
+                        "voice",
+                        "file"
+                    ],
+                    "example": "text"
+                },
+                "sender_id": {
+                    "type": "string",
+                    "example": "ey313afawrfq3.."
+                },
+                "text": {
+                    "type": "string",
+                    "example": "Hello world"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "alex"
                 }
             }
         },
@@ -1908,6 +2497,28 @@
                 "request_id": {
                     "type": "string",
                     "example": "ey124asfaaew32..."
+                }
+            }
+        },
+        "swagger.SendMessageRequest": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string",
+                    "example": "eyew3rsdzdszs..."
+                },
+                "text": {
+                    "type": "string",
+                    "example": "Hello, how are you?"
+                }
+            }
+        },
+        "swagger.SendMessageResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "example": "ey123asdfsfs..."
                 }
             }
         },

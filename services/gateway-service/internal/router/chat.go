@@ -27,8 +27,8 @@ func RegisterChat(mux *http.ServeMux, c *clients.Clients, cache *redis.Client) {
 
 // HandleGetChats godoc
 //	@Summary		Getting chats
-//	@Description	Returning the list of chats by JWT Token
-//	@Tags			chat
+//	@Description	Returning the list of chats by JWT Token. Implemented in the init_client endpoint.
+//	@Tags			depricated
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Success		200	{array}		initrouter.Chats	"The list of chats"
@@ -52,8 +52,8 @@ func HandleGetChats(c *clients.Clients) http.HandlerFunc {
 
 // HandleGetGroups godoc
 //	@Summary		Getting groups
-//	@Description	Getting user groups by JWT Token
-//	@Tags			chat
+//	@Description	Getting user groups by JWT Token. Implemented in the init_client endpoint.
+//	@Tags			depricated
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Success		200	{array}		initrouter.Groups	"The list of groups"

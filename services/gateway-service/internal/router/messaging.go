@@ -208,8 +208,8 @@ func HandleGetMessages(c *clients.Clients) http.HandlerFunc {
 // handleSendMessage godoc
 //
 //	@Summary		Send message
-//	@Description	Sends a new text message to the specified chat
-//	@Tags			messaging
+//	@Description	Sends a new text message to the specified chat. Implemented in the ws endpoint, use NEW_MESSAGE event.
+//	@Tags			depricated
 //	@Accept			json
 //	@Produce		json
 //	@Security		BearerAuth

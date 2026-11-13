@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"gateway-service/internal/clients"
 	initrouter "gateway-service/internal/router/initrouter"
@@ -13,12 +12,7 @@ import (
 	userpb "postly/proto/user"
 )
 
-func avatarURLForUser(userID string) string {
-	if userID == "" {
-		return ""
-	}
-	return "/avatar?user_id=" + url.QueryEscape(userID)
-}
+
 
 func RegisterFriends(mux *http.ServeMux, c *clients.Clients) {
 	mux.Handle("/sendFriendRequest",    middlewares.Chain(handleSendFriendRequest(c), middlewares.JWTMiddleware(c)))
@@ -148,8 +142,8 @@ func handleSendFriendRequest(c *clients.Clients) http.HandlerFunc {
 
 // HandleGetFriendRequests godoc
 //	@Summary		Get received friend requests
-//	@Description	Returns a list of all incoming friend requests for the authorized user
-//	@Tags			friends
+//	@Description	Returns a list of all incoming friend requests for the authorized user. Implemented in the init_client endpoint.
+//	@Tags			depricated
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Success		200	{array}		swagger.FriendRequestItem	"List of received friend requests"
@@ -260,8 +254,8 @@ func handleDeclineFriendRequest(c *clients.Clients) http.HandlerFunc {
 
 // HandleGetFriends godoc
 //	@Summary		Get friends list
-//	@Description	Returns a list of all confirmed friends for the authorized user
-//	@Tags			friends
+//	@Description	Returns a list of all confirmed friends for the authorized user. Implemented in the init_client endpoint.
+//	@Tags			depricated
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Success		200	{array}		swagger.FriendItem	"List of friends"
@@ -327,8 +321,8 @@ func handleCancelFriendRequest(c *clients.Clients) http.HandlerFunc {
 
 // HandleGetSentRequests godoc
 //	@Summary		Get sent friend requests
-//	@Description	Returns a list of all pending outgoing friend requests sent by the authorized user
-//	@Tags			friends
+//	@Description	Returns a list of all pending outgoing friend requests sent by the authorized user. Implemented in the init_client endpoint.
+//	@Tags			depricated
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Success		200	{array}		swagger.SentRequestItem	"List of sent friend requests"
